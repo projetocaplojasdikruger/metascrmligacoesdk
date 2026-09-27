@@ -1237,35 +1237,45 @@ function historicoCli(id){
 function pgVend(){
   const comp = mesAtual(), l = vendsVisiveis();
   const usu = vid => db.usuarios.find(u => u.vendedora_id === vid);
-  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Cadastro de vendedoras por empresa. A meta mensal padrão vale para todos os meses sem meta específica.</div><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
+  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Cada vendedora fica vinculada a uma empresa e a um login (🔗) e só vê a própria empresa e os próprios números. A meta mensal padrão vale para os meses sem meta específica.</div><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
   <div class="tbl-wrap"><table><thead><tr><th>Vendedora</th><th>Empresa</th><th>Contato</th><th class="num">Meta padrão/mês</th><th class="num">Meta ${comp.slice(5)}/${comp.slice(0,4)}</th><th>Acesso</th><th>Situação</th><th></th></tr></thead><tbody>
   ${l.map(v => { const u = usu(v.id); return `<tr><td><b>${esc(v.nome)}</b></td><td>${empTag(v.empresa_id)}</td><td class="small">${esc(v.telefone)}${v.email?'<br>'+esc(v.email):''}</td><td class="num">${fmtN(v.meta_mensal_padrao)}</td><td class="num"><b>${fmtN(metaDe(v.id, comp))}</b></td>
-    <td>${u?`<span class="tag ${u.ativo?'ok':''}">${esc(u.email)}${u.ativo?'':' (inativo)'}</span> <button class="btn sec sm" title="Trocar ou desvincular" onclick="abrirVinculo(${v.id})">🔗</button>`:`<button class="btn sm" onclick="abrirVinculo(${v.id})">🔗 Vincular usuário</button>`}</td><td>${v.ativa?'<span class="tag ok">Ativa</span>':'<span class="tag">Inativa</span>'}</td>
+    <td>${u?`<span class="tag ${u.ativo?'ok':''}">${esc(u.email)}${u.ativo?'':' (inativo)'}</span> <button class="btn sec sm" title="Trocar empresa ou usuário" onclick="abrirVinculo(${v.id})">🔗</button>`:`<button class="btn sm" onclick="abrirVinculo(${v.id})">🔗 Vincular empresa e usuário</button>`}</td><td>${v.ativa?'<span class="tag ok">Ativa</span>':'<span class="tag">Inativa</span>'}</td>
     <td class="act"><button class="btn sec sm" onclick="abrirMetas(${v.id})">🎯 Metas</button> <button class="btn sec sm" onclick="abrirVend(${v.id})">✎</button></td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
   </tbody></table></div>`;
 }
 function usuariosLivres(vid){ return db.usuarios.filter(u => u.perfil !== 'admin' && (!u.vendedora_id || u.vendedora_id === vid)).sort((a,b) => (a.email||'').localeCompare(b.email||'')); }
 function abrirVinculo(vid){
   const v = M.vend[vid], atual = db.usuarios.find(u => u.vendedora_id === vid), livres = usuariosLivres(vid);
-  abrirModal('🔗 Usuário da vendedora · '+esc(v.nome), `
-    <p style="margin-top:0">Escolha o login (e-mail) que esta vendedora usa para entrar no sistema. Ao vincular, o acesso é <b>ativado</b> e ela passa a ver os clientes da ${esc(empNome(v.empresa_id))} e os próprios follow-ups e ligações.</p>
-    <div class="form"><div class="full"><label>Usuário (login)</label><select id="vcUsu">
-      <option value="">— Nenhum (sem acesso) —</option>
-      ${livres.map(u => `<option value="${u.id}" ${atual&&atual.id===u.id?'selected':''}>${esc(u.email)}${u.nome&&u.nome!==u.email.split('@')[0]?' · '+esc(u.nome):''}</option>`).join('')}
-    </select></div></div>
-    ${livres.filter(u=>!u.vendedora_id).length ? '' : '<p class="small muted">Nenhum login livre. Crie o login no Supabase (Authentication → Users → Add user) e clique em ↻ para atualizar; ele aparece nesta lista.</p>'}
-    <p class="small muted">Aparecem aqui os logins que ainda não estão ligados a outra vendedora.</p>`,
-    `<button class="btn sec" onclick="fecharModal()">Cancelar</button><button class="btn sec" onclick="fecharModal(true);abrirUsuario(null,${vid})">🔑 Criar novo login</button><button class="btn" id="vcOk" onclick="salvarVinculo(${vid})">Salvar vínculo</button>`);
+  const temHist = db.followups.some(f => f.vendedora_id === vid) || db.ligacoes.some(l => l.vendedora_id === vid);
+  abrirModal('🔗 Empresa e usuário · '+esc(v.nome), `
+    <p style="margin-top:0">A vendedora enxerga <b>somente a empresa vinculada</b> (clientes e aniversariantes dela) e <b>somente os próprios números</b> (follow-ups, ligações, metas e painel). Apenas o administrador vê todas as vendedoras e todas as empresas.</p>
+    <div class="form">
+      <div class="full"><label>Empresa vinculada *</label><select id="vcEmp">${db.empresas.filter(e => e.ativo || e.id === v.empresa_id).map(e => `<option value="${e.id}" ${e.id===v.empresa_id?'selected':''}>${esc(e.nome)}</option>`).join('')}</select></div>
+      <div class="full"><label>Usuário (login)</label><select id="vcUsu">
+        <option value="">— Nenhum (sem acesso) —</option>
+        ${livres.map(u => `<option value="${u.id}" ${atual&&atual.id===u.id?'selected':''}>${esc(u.email)}${u.nome&&u.nome!==u.email.split('@')[0]?' · '+esc(u.nome):''}</option>`).join('')}
+      </select></div>
+    </div>
+    ${temHist ? '<p class="small muted">Se trocar a empresa, os follow-ups e ligações já registrados continuam na empresa anterior (histórico).</p>' : ''}
+    ${livres.filter(u=>!u.vendedora_id).length ? '' : '<p class="small muted">Nenhum login livre. Crie o login no Supabase (Authentication → Users → Add user) e clique em ↻ para atualizar; ele aparece nesta lista.</p>'}`,
+    `<button class="btn sec" onclick="fecharModal()">Cancelar</button><button class="btn sec" onclick="fecharModal(true);abrirUsuario(null,${vid})">🔑 Criar novo login</button><button class="btn" id="vcOk" onclick="salvarVinculo(${vid})">Salvar</button>`);
 }
 async function salvarVinculo(vid){
-  const novo = $('vcUsu').value, atual = db.usuarios.find(u => u.vendedora_id === vid);
-  if((atual ? atual.id : '') === novo){ fecharModal(true); return; }
+  const v = M.vend[vid], emp = Number($('vcEmp').value), novo = $('vcUsu').value, atual = db.usuarios.find(u => u.vendedora_id === vid);
+  const mudouEmp = emp !== v.empresa_id, mudouUsu = (atual ? atual.id : '') !== novo;
+  if(!mudouEmp && !mudouUsu){ fecharModal(true); return; }
   $('vcOk').disabled = true;
   try{
-    const troca = async (id, o) => { const r = await sbFetch(`/rest/v1/usuarios?id=eq.${id}`, { method:'PATCH', body:o, headers:{ Prefer:'return=representation' } }); const k = db.usuarios.findIndex(x => x.id === id); if(r && r[0] && k >= 0) db.usuarios[k] = r[0]; };
-    if(atual) await troca(atual.id, { vendedora_id:null, ativo:false });
-    if(novo){ const u = db.usuarios.find(x => x.id === novo); await troca(novo, { vendedora_id:vid, perfil:'vendedora', ativo:true, nome: (u.nome && u.nome !== (u.email||'').split('@')[0]) ? u.nome : M.vend[vid].nome }); }
-    fecharModal(true); toast(novo ? 'Usuário vinculado e acesso ativado.' : 'Usuário desvinculado.', 'ok'); pgVend();
+    if(mudouEmp) Object.assign(v, await api.upd('vendedoras', vid, { empresa_id:emp }));
+    if(mudouUsu){
+      const troca = async (id, o) => { const r = await sbFetch(`/rest/v1/usuarios?id=eq.${id}`, { method:'PATCH', body:o, headers:{ Prefer:'return=representation' } }); const k = db.usuarios.findIndex(x => x.id === id); if(r && r[0] && k >= 0) db.usuarios[k] = r[0]; };
+      if(atual) await troca(atual.id, { vendedora_id:null, ativo:false });
+      if(novo){ const u = db.usuarios.find(x => x.id === novo); await troca(novo, { vendedora_id:vid, perfil:'vendedora', ativo:true, nome: (u.nome && u.nome !== (u.email||'').split('@')[0]) ? u.nome : v.nome }); }
+    }
+    fecharModal(true);
+    toast([mudouEmp ? 'Empresa vinculada: '+empNome(emp) : '', mudouUsu ? (novo ? 'usuário vinculado e acesso ativado' : 'usuário desvinculado') : ''].filter(Boolean).join(' · ') + '.', 'ok');
+    pgVend();
   }catch(e){ toast(e.message, 'err'); $('vcOk').disabled = false; }
 }
 function abrirVend(id){
