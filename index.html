@@ -32,6 +32,20 @@ a{color:var(--or2)}
 .login-box input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px}
 .login-box .btn{width:100%;margin-top:20px;padding:12px;justify-content:center}
 #loginMsg{color:var(--bad);font-size:13px;margin-top:10px;text-align:center;min-height:18px}
+.pw{position:relative}
+.pw input{padding-right:46px}
+.pw button{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:38px;height:36px;border:0;background:transparent;cursor:pointer;border-radius:6px;color:var(--mut);display:flex;align-items:center;justify-content:center}
+.pw button:hover,.pw button:focus-visible{background:var(--orl);color:var(--or2)}
+.lg-opts{display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:13px;color:var(--gr2)}
+.lg-opts label{display:flex!important;align-items:center;gap:8px;margin:0!important;cursor:pointer;font-weight:500!important;font-size:13px!important;color:var(--gr2)!important}
+.lg-opts input{width:18px!important;height:18px;accent-color:var(--or);padding:0!important}
+.imp-file{border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;background:#FAFAFB}
+.imp-file .nm{font-weight:700;word-break:break-all}
+.imp-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}
+.imp-grid div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+.imp-grid b{display:block;font-size:18px}
+.imp-grid span{font-size:11px;color:var(--mut)}
+@media(max-width:600px){.imp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* ---------- LAYOUT ---------- */
 #app{display:flex;min-height:100vh}
@@ -299,7 +313,8 @@ body.drag-on{cursor:grabbing;user-select:none;-webkit-user-select:none}
     <label for="lgEmail">E-mail</label>
     <input id="lgEmail" type="email" required autocomplete="username">
     <label for="lgSenha">Senha</label>
-    <input id="lgSenha" type="password" required autocomplete="current-password">
+    <div class="pw"><input id="lgSenha" type="password" required autocomplete="current-password"><button type="button" id="lgOlho" onclick="alternarSenha()" aria-label="Mostrar senha" title="Mostrar senha"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line id="lgRisco" x1="3" y1="3" x2="21" y2="21" style="display:none"/></svg></button></div>
+    <div class="lg-opts"><label for="lgLembrar"><input type="checkbox" id="lgLembrar"> Lembrar senha</label></div>
     <button class="btn" type="submit" id="lgBtn">Entrar</button>
     <div id="loginMsg"></div>
   </form>
@@ -463,16 +478,53 @@ function indexar(){
 
 /* ============================ LOGIN / BOOT ============================ */
 
+/* Mostrar senha / Lembrar senha
+   A senha NÃO é gravada em texto no navegador: ela fica no gerenciador de senhas do próprio
+   navegador (Chrome/Edge via Credential Management; demais navegadores pelo autopreenchimento).
+   Guardamos apenas o e-mail e a preferência. */
+const LEMBRAR_KEY = 'cap_lig_lembrar';
+function alternarSenha(){
+  const i = $('lgSenha'), ver = i.type === 'password';
+  i.type = ver ? 'text' : 'password'; $('lgRisco').style.display = ver ? '' : 'none';
+  $('lgOlho').setAttribute('aria-label', ver ? 'Ocultar senha' : 'Mostrar senha'); $('lgOlho').title = ver ? 'Ocultar senha' : 'Mostrar senha';
+}
+async function prepararLogin(){
+  let lemb = null; try{ lemb = JSON.parse(localStorage.getItem(LEMBRAR_KEY)); }catch(e){}
+  $('lgLembrar').checked = !!lemb;
+  if(!lemb || !lemb.email) return;
+  if(!$('lgEmail').value) $('lgEmail').value = lemb.email;
+  try{
+    if(window.PasswordCredential && navigator.credentials){
+      const c = await navigator.credentials.get({ password:true, mediation:'optional' });
+      if(c && c.password && (!c.id || c.id.toLowerCase() === lemb.email.toLowerCase())) $('lgSenha').value = c.password;
+    }
+  }catch(e){}
+}
+async function lembrarAposLogin(email, senha){
+  try{
+    if($('lgLembrar').checked){
+      localStorage.setItem(LEMBRAR_KEY, JSON.stringify({ email }));
+      if(window.PasswordCredential && navigator.credentials) await navigator.credentials.store(new PasswordCredential({ id:email, password:senha, name:email }));
+    } else {
+      localStorage.removeItem(LEMBRAR_KEY);
+      if(navigator.credentials && navigator.credentials.preventSilentAccess) await navigator.credentials.preventSilentAccess();
+    }
+  }catch(e){}
+}
+
 $('loginForm').addEventListener('submit', async ev => {
   ev.preventDefault(); $('loginMsg').textContent = ''; $('lgBtn').disabled = true;
   try{
-    setSess(await authReq('token?grant_type=password', { email: $('lgEmail').value.trim(), password: $('lgSenha').value }));
+    const email = $('lgEmail').value.trim(), senha = $('lgSenha').value;
+    setSess(await authReq('token?grant_type=password', { email, password: senha }));
+    $('lgSenha').value = ''; $('lgSenha').type = 'password'; $('lgRisco').style.display = 'none';
+    lembrarAposLogin(email, senha);
     await boot();
   }catch(e){ $('loginMsg').textContent = e.message; }
   finally{ $('lgBtn').disabled = false; }
 });
 
-function mostrarLogin(msg){ $('app').classList.add('hidden'); $('login').classList.remove('hidden'); $('loginMsg').textContent = msg||''; }
+function mostrarLogin(msg){ $('app').classList.add('hidden'); $('login').classList.remove('hidden'); $('loginMsg').textContent = msg||''; prepararLogin(); }
 function sair(){ S = null; st.avisoAniv = false; st.page = 'painel'; st.emp = ''; fecharModal(true); try{ localStorage.removeItem(SESS_KEY); }catch(e){} mostrarLogin(); }
 async function logout(){ try{ if(S) await authReq('logout', {}, S.access_token); }catch(e){} sair(); }
 
@@ -1038,6 +1090,7 @@ function pgCli(){
   <div class="filters">
     <div class="f grow"><label>Buscar</label><input id="cliQ" value="${esc(p.q)}" placeholder="Nome ou telefone" oninput="st.cli.q=this.value;st.cli.pag=0;clearTimeout(window._cq);window._cq=setTimeout(()=>{pgCli();const i=$('cliQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)},300)"></div>
     <div class="f"><label>Aniversário no mês</label><select onchange="st.cli.mes=this.value;st.cli.pag=0;pgCli()"><option value="">Todos</option>${MESES.map((m,i)=>`<option value="${pad(i+1)}" ${p.mes===pad(i+1)?'selected':''}>${m}</option>`).join('')}</select></div>
+    ${isAdmin()?'<button class="btn sec" onclick="abrirImportacao()">⬆ Importar planilha</button>':''}
     <button class="btn" onclick="abrirCliente()">+ Novo cliente</button>
   </div>
   <div class="small muted" style="margin-bottom:8px">${fmtN(l.length)} cliente(s)</div>
@@ -1049,6 +1102,90 @@ function pgCli(){
   </tbody></table></div>
   <div class="pager"><button class="btn sec sm" ${p.pag<=0?'disabled':''} onclick="st.cli.pag--;pgCli()">‹ Anterior</button><span class="small">Página ${p.pag+1} de ${pags}</span><button class="btn sec sm" ${p.pag>=pags-1?'disabled':''} onclick="st.cli.pag++;pgCli()">Próxima ›</button></div>`;
 }
+/* ---------- Importar clientes da planilha (Microvix) — empresa pelo nome do arquivo ---------- */
+const XLSX_SRC = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+const XLSX_SRI = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw';
+let IMP = [];
+function carregarXLSX(){
+  if(window.XLSX) return Promise.resolve();
+  return new Promise((ok, erro) => { const sc = document.createElement('script'); sc.src = XLSX_SRC; sc.integrity = XLSX_SRI; sc.crossOrigin = 'anonymous';
+    sc.onload = ok; sc.onerror = () => erro(new Error('Não foi possível carregar o leitor de planilhas. Verifique a internet e tente de novo.')); document.head.appendChild(sc); });
+}
+const normNome = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+function empresaPeloArquivo(nomeArq){
+  const alvo = String(nomeArq).toUpperCase();
+  const cand = db.empresas.filter(e => e.ativo).map(e => ({ e, re: new RegExp(e.nome.toUpperCase().split('').map(ch => /[A-Z0-9]/.test(ch) ? ch : '.?').join('')) }))
+    .filter(x => x.re.test(alvo) || alvo.includes(e_cod(x.e))).sort((a,b) => b.e.nome.length - a.e.nome.length);
+  return cand.length ? cand[0].e : null;
+}
+function e_cod(e){ return (e.codigo||'').toUpperCase(); }
+function dataPlanilha(v){
+  if(v === null || v === undefined || v === '' || v === '-') return null;
+  if(typeof v === 'number'){ const d = new Date(Math.round((v - 25569) * 86400000)); return isNaN(d) ? null : d.toISOString().slice(0,10); }
+  const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/); if(!m) return null;
+  let a = Number(m[3]); if(a < 100) a += a > 30 ? 1900 : 2000;
+  const iso = a+'-'+pad(m[2])+'-'+pad(m[1]), d = new Date(iso+'T12:00:00');
+  return (!isNaN(d) && isoLocal(d) === iso) ? iso : null;
+}
+const telPlanilha = v => { const t = String(v ?? '').trim(); return (!t || t === '-') ? null : t; };
+async function lerPlanilha(file){
+  const wb = XLSX.read(await file.arrayBuffer(), { type:'array' });
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:'' });
+  const hi = rows.findIndex(r => r.some(c => normNome(c).startsWith('NOME')));
+  if(hi < 0) throw new Error(`${file.name}: não encontrei a coluna "Nome/Razão Social".`);
+  const H = rows[hi].map(normNome), col = p => H.findIndex(x => x.startsWith(p));
+  const cN = col('NOME'), cT = col('TEL'), cC = col('CEL'), cD = H.findIndex(x => x.includes('NASC'));
+  return rows.slice(hi+1).map(r => ({ nome: String(r[cN] ?? '').replace(/\s+/g,' ').trim(), telefone: cT>=0 ? telPlanilha(r[cT]) : null, celular: cC>=0 ? telPlanilha(r[cC]) : null, data_nascimento: cD>=0 ? dataPlanilha(r[cD]) : null })).filter(r => r.nome);
+}
+const chaveCli = (emp, c) => emp+'|'+normNome(c.nome)+'|'+discar(c.celular||c.telefone||'');
+function analisarImp(){
+  IMP.forEach(f => {
+    const emp = Number(f.emp), exist = new Set(db.clientes.filter(c => c.empresa_id === emp).map(c => chaveCli(emp, c))), vistos = new Set();
+    f.novos = []; f.jaExiste = 0; f.dup = 0;
+    f.linhas.forEach(r => { const k = chaveCli(emp, r); if(exist.has(k)) f.jaExiste++; else if(vistos.has(k)) f.dup++; else { vistos.add(k); f.novos.push(r); } });
+  });
+}
+function abrirImportacao(){
+  IMP = [];
+  abrirModal('⬆ Importar clientes', `
+    <p style="margin-top:0">Selecione as planilhas de clientes do Microvix. A empresa é identificada pelo <b>nome do arquivo</b> (ex.: <i>CLIENTES 2026 - KRUGER.xlsx</i>, <i>CLIENTES 2026 - DIKRÜGER.xlsx</i>). Clientes que já existem na empresa (mesmo nome e telefone) não são duplicados.</p>
+    <input type="file" id="impArq" accept=".xlsx,.xls,.csv" multiple onchange="impSelecionar(this.files)">
+    <div id="impLista"></div>`,
+    `<button class="btn sec" onclick="fecharModal()">Cancelar</button><button class="btn" id="impOk" disabled onclick="impExecutar()">Importar</button>`, true);
+}
+async function impSelecionar(files){
+  if(!files || !files.length) return;
+  $('impLista').innerHTML = '<p class="muted">Lendo planilhas…</p>'; $('impOk').disabled = true;
+  try{
+    await carregarXLSX(); IMP = [];
+    for(const f of files){ const e = empresaPeloArquivo(f.name); IMP.push({ arq:f.name, emp: e ? e.id : '', linhas: await lerPlanilha(f) }); }
+    impRender();
+  }catch(e){ $('impLista').innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
+}
+function impRender(){
+  analisarImp();
+  $('impLista').innerHTML = IMP.map((f,i) => `<div class="imp-file"><div class="nm">📄 ${esc(f.arq)}</div>
+    <div class="form" style="margin-top:8px"><div class="full"><label>Empresa ${f.emp?'(identificada pelo nome do arquivo)':''}</label><select onchange="IMP[${i}].emp=this.value;impRender()"><option value="">Selecione…</option>${db.empresas.filter(e=>e.ativo).map(e=>`<option value="${e.id}" ${String(f.emp)===String(e.id)?'selected':''}>${esc(e.nome)}</option>`).join('')}</select></div></div>
+    ${f.emp ? `<div class="imp-grid"><div><b>${fmtN(f.linhas.length)}</b><span>lidos</span></div><div><b style="color:var(--ok)">${fmtN(f.novos.length)}</b><span>novos</span></div><div><b>${fmtN(f.jaExiste)}</b><span>já cadastrados</span></div><div><b>${fmtN(f.novos.filter(r=>r.data_nascimento).length)}</b><span>novos c/ nascimento</span></div></div>` : '<p class="small" style="color:var(--bad)">Não identifiquei a empresa pelo nome do arquivo. Selecione acima.</p>'}
+  </div>`).join('');
+  const tot = IMP.reduce((s,f) => s + (f.emp ? f.novos.length : 0), 0);
+  $('impOk').disabled = !tot || IMP.some(f => !f.emp); $('impOk').textContent = tot ? `Importar ${fmtN(tot)} cliente(s)` : 'Nada novo para importar';
+}
+async function impExecutar(){
+  $('impOk').disabled = true; let feito = 0; const tot = IMP.reduce((s,f) => s + f.novos.length, 0);
+  try{
+    for(const f of IMP){
+      for(let i = 0; i < f.novos.length; i += 500){
+        const lote = f.novos.slice(i, i+500).map(r => ({ ...r, empresa_id:Number(f.emp) }));
+        const r = await sbFetch('/rest/v1/clientes', { method:'POST', body:lote, headers:{ Prefer:'return=representation' } });
+        (r||[]).forEach(c => { db.clientes.push(c); M.cli[c.id] = c; });
+        feito += lote.length; $('impOk').textContent = `Importando… ${fmtN(feito)} de ${fmtN(tot)}`;
+      }
+    }
+    fecharModal(true); toast(`${fmtN(feito)} cliente(s) importado(s).`, 'ok'); montarNav(); pgCli();
+  }catch(e){ toast(`Parou em ${fmtN(feito)} de ${fmtN(tot)}: ${e.message}. Rode de novo — os já importados não duplicam.`, 'err'); impRender(); }
+}
+
 function abrirCliente(id){
   const c = id ? M.cli[id] : null, emp = c ? c.empresa_id : (curEmp() || (db.empresas[0]||{}).id);
   abrirModal(c ? 'Editar cliente' : 'Novo cliente', `<div class="form">
