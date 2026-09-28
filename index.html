@@ -211,6 +211,16 @@ tr.hl td{background:#FFF1E5!important;animation:hl 2.5s ease}
 .spin{width:38px;height:38px;border:4px solid #F3D3BD;border-top-color:var(--or);border-radius:50%;animation:sp 0.8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 .blocked{max-width:460px;margin:80px auto;text-align:center}
+.ck-row{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;background:#fff}
+.ck-row:hover{border-color:var(--or)}
+.ck-row input{width:18px;height:18px;accent-color:var(--or);margin-top:1px;flex-shrink:0}
+.form.f4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.plCk{width:18px;height:18px;accent-color:var(--or);cursor:pointer}
+.pl-bar{position:sticky;bottom:10px;z-index:20;background:#fff;border:1px solid var(--line);border-top:3px solid var(--or);border-radius:12px;padding:10px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px;box-shadow:0 -4px 16px rgba(0,0,0,.10)}
+.pl-bar #plCnt{font-weight:700;font-size:15px}
+.pl-bar .btn{margin-left:auto}
+@media(max-width:900px){.form.f4{grid-template-columns:repeat(2,minmax(0,1fr))}.pl-bar{bottom:calc(66px + env(safe-area-inset-bottom,0px))}}
+@media(max-width:600px){.form.f4{grid-template-columns:1fr}}
 
 /* ---------- SEMANA (arrastar) ---------- */
 .wk-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
@@ -394,9 +404,11 @@ function telLinks(c, onclick){
 }
 function diasUteis(comp, ate){ // ate = 'AAAA-MM-DD' opcional (inclusive)
   const [y,m] = comp.split('-').map(Number); const last = new Date(y, m, 0).getDate(); let n = 0;
-  for(let d=1; d<=last; d++){ const iso = comp+'-'+pad(d); if(ate && iso>ate) break; const w = new Date(y,m-1,d).getDay(); if(w>0 && w<6) n++; }
+  for(let d=1; d<=last; d++){ const iso = comp+'-'+pad(d); if(ate && iso>ate) break; const w = new Date(y,m-1,d).getDay(); if(w>0) n++; } // segunda a sábado
   return n;
 }
+const fmtDec = n => (n||0).toLocaleString('pt-BR', { maximumFractionDigits:1 });
+function metaDiaTxt(meta, comp){ const du = diasUteis(comp); return du ? `≈ ${fmtDec(meta/du)}/dia · ${du} dias úteis` : ''; }
 function toast(msg, tipo){ const t = $('toast'); t.textContent = msg; t.className = tipo||''; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(()=> t.style.display='none', 3500); }
 function loading(on, msg){ $('loading').classList.toggle('show', !!on); if(msg) $('loadingMsg').textContent = msg; }
 
@@ -448,25 +460,41 @@ const api = {
 };
 
 /* ============================ ESTADO ============================ */
-const db = { me:null, empresas:[], vendedoras:[], metas:[], usuarios:[], clientes:[], followups:[], ligacoes:[] };
+const db = { me:null, empresas:[], vendedoras:[], metas:[], usuarios:[], uv:[], clientes:[], followups:[], ligacoes:[] };
 const M = { emp:{}, vend:{}, cli:{}, ultLig:{} };
 const st = { page:'painel', emp:'', charts:[], call:null, hlLig:null, avisoAniv:false,
-  painel:{ comp:mesAtual(), vend:'' },
-  plan:{ filtro:'ate_hoje', vend:'', q:'', semana:null, view:(()=>{ try{ return localStorage.getItem('cap_plan_view') || 'lista'; }catch(e){ return 'lista'; } })() },
-  lig:{ de: mesAtual()+'-01', ate: hoje(), vend:'', res:'', q:'' },
-  cli:{ q:'', mes:'', pag:0 },
-  aniv:{ tab:'hoje' }
+  painel:{ comp:mesAtual(), vend:'', cls:'' },
+  plan:{ filtro:'ate_hoje', vend:'', q:'', cls:'', semana:null, view:(()=>{ try{ return localStorage.getItem('cap_plan_view') || 'lista'; }catch(e){ return 'lista'; } })() },
+  lig:{ de: mesAtual()+'-01', ate: hoje(), vend:'', res:'', q:'', cls:'' },
+  cli:{ q:'', mes:'', pag:0, cls:'' },
+  pl:{ vend:'', data:hoje(), hora:'', motivo:'Retorno', desc:'', q:'', cls:'', cart:'', anivMot:true, sel:new Set() },
+  aniv:{ tab:'hoje', emp:'', cls:'', mes:mesAtual().slice(5), ano:new Date().getFullYear() }
 };
 const isAdmin = () => db.me && db.me.perfil === 'admin';
-const minhaVend = () => db.me && db.me.vendedora_id ? M.vend[db.me.vendedora_id] : null;
+/* Um login pode estar vinculado a várias vendedoras (sempre da mesma empresa) — tabela usuario_vendedoras */
+function vincDe(uid){
+  const u = db.me && db.me.id === uid ? db.me : db.usuarios.find(x => x.id === uid);
+  const s = new Set(db.uv.filter(x => x.usuario_id === uid).map(x => Number(x.vendedora_id)));
+  if(u && u.vendedora_id) s.add(Number(u.vendedora_id));
+  return [...s];
+}
+const minhas = () => db.me ? vincDe(db.me.id) : [];
+const verVendFiltro = () => isAdmin() || minhas().length > 1;
+const minhaVend = () => { const l = minhas(); return l.length ? M.vend[l[0]] : null; };
 function curEmp(){ if(isAdmin()) return st.emp ? Number(st.emp) : null; const v = minhaVend(); return v ? v.empresa_id : null; }
 const empOk = id => { const e = curEmp(); return !e || e === id; };
-function vendsVisiveis(soAtivas){ let l = db.vendedoras.filter(v => empOk(v.empresa_id)); if(!isAdmin()) l = l.filter(v => v.id === db.me.vendedora_id); if(soAtivas) l = l.filter(v => v.ativa); return l.sort((a,b)=>a.nome.localeCompare(b.nome)); }
+function vendsVisiveis(soAtivas){ let l = db.vendedoras.filter(v => empOk(v.empresa_id)); if(!isAdmin()){ const mv = minhas(); l = l.filter(v => mv.includes(v.id)); } if(soAtivas) l = l.filter(v => v.ativa); return l.sort((a,b)=>a.nome.localeCompare(b.nome)); }
 function metaDe(vid, comp){ const m = db.metas.find(x => x.vendedora_id===vid && x.competencia===comp); if(m) return m.meta_ligacoes; const v = M.vend[vid]; return v ? (v.meta_mensal_padrao||0) : 0; }
 const empNome = id => (M.emp[id]||{}).nome || '';
 const empTag = id => { const e = M.emp[id]; return e ? `<span class="tag" style="background:${e.cor}22;color:${e.cor}">${esc(e.nome)}</span>` : ''; };
 const vendNome = id => (M.vend[id]||{}).nome || '—';
 const cliNome = id => (M.cli[id]||{}).nome || '(cliente removido)';
+const CLASSES = { ouro:{ l:'Ouro', ic:'🥇', bg:'#FEF3C7', fg:'#92400E' }, prata:{ l:'Prata', ic:'🥈', bg:'#E5E7EB', fg:'#374151' }, bronze:{ l:'Bronze', ic:'🥉', bg:'#FDE2CF', fg:'#9A3412' } };
+const clsNome = c => { const k = c && CLASSES[c.classificacao]; return k ? k.l : ''; };
+const clsTag = c => { const k = c && CLASSES[c.classificacao]; return k ? `<span class="tag" style="background:${k.bg};color:${k.fg}">${k.ic} ${k.l}</span>` : ''; };
+function clsOk(cid, v){ if(!v) return true; const c = M.cli[cid], k = c ? (c.classificacao||'') : ''; return v === '_sem' ? !k : k === v; }
+function clsFiltro(val, onch){ return `<div class="f"><label>Classificação</label><select onchange="${onch}">${[['','Todas'],['ouro','🥇 Ouro'],['prata','🥈 Prata'],['bronze','🥉 Bronze'],['_sem','Sem classificação']].map(([v,t])=>`<option value="${v}" ${val===v?'selected':''}>${t}</option>`).join('')}</select></div>`; }
+const clsDesc = v => v ? '  -  Classificação: ' + (v === '_sem' ? 'Sem classificação' : CLASSES[v].l) : '';
 
 function indexar(){
   M.emp = {}; db.empresas.forEach(e => M.emp[e.id] = e);
@@ -479,37 +507,54 @@ function indexar(){
 /* ============================ LOGIN / BOOT ============================ */
 
 /* Mostrar senha / Lembrar senha
-   A senha NÃO é gravada em texto no navegador: ela fica no gerenciador de senhas do próprio
-   navegador (Chrome/Edge via Credential Management; demais navegadores pelo autopreenchimento).
-   Guardamos apenas o e-mail e a preferência. */
+   A senha é guardada CIFRADA (AES-GCM) neste navegador. A chave de cifra é gerada pelo
+   próprio navegador, não pode ser exportada e fica no IndexedDB; no localStorage fica só
+   o texto cifrado. Desmarcar "Lembrar senha" apaga o que foi guardado. */
 const LEMBRAR_KEY = 'cap_lig_lembrar';
 function alternarSenha(){
   const i = $('lgSenha'), ver = i.type === 'password';
   i.type = ver ? 'text' : 'password'; $('lgRisco').style.display = ver ? '' : 'none';
   $('lgOlho').setAttribute('aria-label', ver ? 'Ocultar senha' : 'Mostrar senha'); $('lgOlho').title = ver ? 'Ocultar senha' : 'Mostrar senha';
 }
+function chaveLembrar(){
+  return new Promise((ok, erro) => {
+    const rq = indexedDB.open('cap_lig', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('k');
+    rq.onerror = () => erro(rq.error);
+    rq.onsuccess = () => {
+      const idb = rq.result, g = idb.transaction('k').objectStore('k').get('lembrar');
+      g.onerror = () => erro(g.error);
+      g.onsuccess = async () => {
+        if(g.result) return ok(g.result);
+        try{
+          const k = await crypto.subtle.generateKey({ name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']);
+          const t = idb.transaction('k','readwrite'); t.objectStore('k').put(k, 'lembrar');
+          t.oncomplete = () => ok(k); t.onerror = () => erro(t.error);
+        }catch(e){ erro(e); }
+      };
+    };
+  });
+}
+const b64 = u8 => btoa(String.fromCharCode(...u8));
+const deB64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
 async function prepararLogin(){
   let lemb = null; try{ lemb = JSON.parse(localStorage.getItem(LEMBRAR_KEY)); }catch(e){}
   $('lgLembrar').checked = !!lemb;
   if(!lemb || !lemb.email) return;
-  if(!$('lgEmail').value) $('lgEmail').value = lemb.email;
+  $('lgEmail').value = lemb.email;
+  if(!lemb.iv || !lemb.ct) return;
   try{
-    if(window.PasswordCredential && navigator.credentials){
-      const c = await navigator.credentials.get({ password:true, mediation:'optional' });
-      if(c && c.password && (!c.id || c.id.toLowerCase() === lemb.email.toLowerCase())) $('lgSenha').value = c.password;
-    }
+    const pt = await crypto.subtle.decrypt({ name:'AES-GCM', iv:deB64(lemb.iv) }, await chaveLembrar(), deB64(lemb.ct));
+    $('lgSenha').value = new TextDecoder().decode(pt);
   }catch(e){}
 }
 async function lembrarAposLogin(email, senha){
+  if(!$('lgLembrar').checked){ try{ localStorage.removeItem(LEMBRAR_KEY); }catch(e){} return; }
   try{
-    if($('lgLembrar').checked){
-      localStorage.setItem(LEMBRAR_KEY, JSON.stringify({ email }));
-      if(window.PasswordCredential && navigator.credentials) await navigator.credentials.store(new PasswordCredential({ id:email, password:senha, name:email }));
-    } else {
-      localStorage.removeItem(LEMBRAR_KEY);
-      if(navigator.credentials && navigator.credentials.preventSilentAccess) await navigator.credentials.preventSilentAccess();
-    }
-  }catch(e){}
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name:'AES-GCM', iv }, await chaveLembrar(), new TextEncoder().encode(senha)));
+    localStorage.setItem(LEMBRAR_KEY, JSON.stringify({ email, iv:b64(iv), ct:b64(ct) }));
+  }catch(e){ try{ localStorage.setItem(LEMBRAR_KEY, JSON.stringify({ email })); }catch(x){} }
 }
 
 $('loginForm').addEventListener('submit', async ev => {
@@ -539,20 +584,22 @@ async function carregarDados(){
   ]);
   Object.assign(db, { empresas:emp, vendedoras:vend, metas, clientes:cli, followups:fu, ligacoes:lig });
   db.usuarios = isAdmin() ? await sbAll('usuarios','select=*&order=created_at') : [db.me];
+  await carregarUV();
   indexar();
 }
 
+async function carregarUV(){ try{ db.uv = await sbAll('usuario_vendedoras', isAdmin() ? 'select=*' : 'select=*&usuario_id=eq.'+db.me.id); }catch(e){ db.uv = []; } }
 async function boot(){
   loading(true, 'Carregando dados…');
   try{
     const me = (await sbFetch(`/rest/v1/usuarios?id=eq.${S.user.id}&select=*`))[0];
     $('login').classList.add('hidden'); $('app').classList.remove('hidden');
     if(!me || !me.ativo){ bloqueado('Seu usuário está inativo ou não foi encontrado. Fale com o administrador.'); return; }
-    db.me = me;
-    if(me.perfil !== 'admin' && !me.vendedora_id){ bloqueado('Seu acesso foi criado, mas ainda não está vinculado a uma vendedora. Peça ao administrador para concluir a liberação.'); return; }
+    db.me = me; await carregarUV();
+    if(me.perfil !== 'admin' && !minhas().length){ bloqueado('Seu acesso foi criado, mas ainda não está vinculado a uma vendedora. Peça ao administrador para concluir a liberação.'); return; }
     await carregarDados();
     $('uNome').textContent = me.nome || me.email;
-    $('uPerfil').textContent = isAdmin() ? 'Administrador' : ('Vendedora · ' + empNome(curEmp()));
+    $('uPerfil').textContent = isAdmin() ? 'Administrador' : ((minhas().length > 1 ? minhas().length+' vendedoras' : 'Vendedora') + ' · ' + empNome(curEmp()));
     montarEmpSel(); montarNav(); ir(st.page);
     if(!st.avisoAniv){ st.avisoAniv = true; avisoAniversariantes(); }
   }catch(e){ toast(e.message, 'err'); if(!S) mostrarLogin(e.message); }
@@ -570,13 +617,14 @@ function montarEmpSel(){
   if(isAdmin()){ s.disabled = false; s.innerHTML = '<option value="">Todas</option>' + db.empresas.filter(e=>e.ativo).map(e => `<option value="${e.id}" ${String(st.emp)===String(e.id)?'selected':''}>${esc(e.nome)}</option>`).join(''); }
   else { const e = M.emp[curEmp()]; s.innerHTML = `<option>${esc(e ? e.nome : '')}</option>`; s.disabled = true; }
 }
-function setEmp(v){ st.emp = v; st.painel.vend = ''; st.plan.vend = ''; st.lig.vend = ''; st.cli.pag = 0; montarNav(); ir(st.page); }
+function setEmp(v){ st.emp = v; st.painel.vend = ''; st.plan.vend = ''; st.lig.vend = ''; st.cli.pag = 0; st.aniv.emp = ''; st.pl.vend = ''; st.pl.sel = new Set(); montarNav(); ir(st.page); }
 
 /* ============================ NAVEGAÇÃO ============================ */
 const PAGES = {
   painel:{ t:'Painel de Metas', ic:'📊', fn:()=>pgPainel() },
   aniversariantes:{ t:'Aniversariantes', ic:'🎂', fn:()=>pgAniv() },
   planejamento:{ t:'Planejamento (Follow-up)', ic:'📅', fn:()=>pgPlan() },
+  planejar:{ t:'Planejar Ligações', ic:'📋', fn:()=>pgPlanejar() },
   ligacoes:{ t:'Ligações Realizadas', ic:'✅', fn:()=>pgLig() },
   clientes:{ t:'Clientes', ic:'👥', fn:()=>pgCli() },
   vendedoras:{ t:'Vendedoras', ic:'👩‍💼', fn:()=>pgVend(), adm:true },
@@ -587,7 +635,7 @@ function montarNav(){
   const nAniv = anivDoDia(hoje()).length;
   const nAtras = fuVisiveis().filter(f => f.status==='pendente' && f.data_prevista <= hoje()).length;
   const item = (k, bdg) => `<a class="${st.page===k?'on':''}" onclick="ir('${k}')"><span class="ic">${PAGES[k].ic}</span>${PAGES[k].t}${bdg?`<span class="bdg">${bdg}</span>`:''}</a>`;
-  let h = '<div class="sec">Operação</div>' + item('painel') + item('aniversariantes', nAniv||'') + item('planejamento', nAtras||'') + item('ligacoes') + item('clientes');
+  let h = '<div class="sec">Operação</div>' + item('painel') + item('aniversariantes', nAniv||'') + item('planejamento', nAtras||'') + item('planejar') + item('ligacoes') + item('clientes');
   if(isAdmin()) h += '<div class="sec">Cadastros</div>' + item('vendedoras') + item('empresas') + item('usuarios');
   $('nav').innerHTML = h;
   $('bnav').innerHTML = [['painel','Painel'],['aniversariantes','Aniversários',nAniv],['planejamento','Follow-up',nAtras],['ligacoes','Ligações'],['clientes','Clientes']]
@@ -615,8 +663,8 @@ function fecharModal(forcar){
 $('modal').addEventListener('mousedown', e => { if(e.target.id === 'modal') fecharModal(); });
 
 /* ============================ FILTROS COMUNS ============================ */
-function fuVisiveis(){ return db.followups.filter(f => empOk(f.empresa_id) && (isAdmin() || f.vendedora_id === db.me.vendedora_id)); }
-function ligVisiveis(){ return db.ligacoes.filter(l => empOk(l.empresa_id) && (isAdmin() || l.vendedora_id === db.me.vendedora_id)); }
+function fuVisiveis(){ return db.followups.filter(f => empOk(f.empresa_id) && (isAdmin() || minhas().includes(f.vendedora_id))); }
+function ligVisiveis(){ return db.ligacoes.filter(l => empOk(l.empresa_id) && (isAdmin() || minhas().includes(l.vendedora_id))); }
 function cliVisiveis(){ return db.clientes.filter(c => empOk(c.empresa_id)); }
 function vendOptions(sel, todasLabel, empId){
   let l = vendsVisiveis(); if(empId) l = l.filter(v => v.empresa_id === Number(empId));
@@ -625,10 +673,12 @@ function vendOptions(sel, todasLabel, empId){
 
 /* ============================ ANIVERSARIANTES ============================ */
 function mmdd(iso){ return iso ? iso.slice(5,10) : ''; }
-function anivDoDia(iso){
+function anivDoDia(iso, filtrar){
   const alvo = iso.slice(5,10); const ano = Number(iso.slice(0,4));
   const bissexto = (ano%4===0 && ano%100!==0) || ano%400===0;
-  return cliVisiveis().filter(c => { if(!c.data_nascimento || !c.ativo) return false; const md = mmdd(c.data_nascimento); return md === alvo || (!bissexto && md === '02-29' && alvo === '02-28'); });
+  return cliVisiveis().filter(c => { if(!c.data_nascimento || !c.ativo) return false;
+    if(filtrar && ((st.aniv.emp && c.empresa_id !== Number(st.aniv.emp)) || !clsOk(c.id, st.aniv.cls))) return false;
+    const md = mmdd(c.data_nascimento); return md === alvo || (!bissexto && md === '02-29' && alvo === '02-28'); });
 }
 function ligouHoje(cid){ const h = hoje(); return db.ligacoes.find(l => l.cliente_id === cid && dataDeTs(l.inicio) === h); }
 function idadeEm(c, iso){ return Number(iso.slice(0,4)) - Number(c.data_nascimento.slice(0,4)); }
@@ -637,7 +687,7 @@ function anivItem(c, iso){
   const lig = iso === hoje() ? ligouHoje(c.id) : null;
   return `<div class="aniv ${lig?'done':''}">
     <div class="cake">${lig?'✅':'🎂'}</div>
-    <div class="bd"><b>${esc(c.nome)}</b> ${empTag(c.empresa_id)}
+    <div class="bd"><b>${esc(c.nome)}</b> ${empTag(c.empresa_id)} ${clsTag(c)}
       <div class="small muted">${fmtDM(c.data_nascimento)} · faz ${idadeEm(c, iso)} anos ${lig?` · <span class="tag ok">Ligação feita às ${fmtDH(lig.inicio).slice(11)} por ${esc(vendNome(lig.vendedora_id))}</span>`:''}</div>
       <div class="small muted">${[c.celular, c.telefone].filter(Boolean).map(esc).join(' · ') || 'Sem telefone'}</div>
     </div>
@@ -655,19 +705,26 @@ function avisoAniversariantes(){
     `<button class="btn sec" onclick="fecharModal()">Fechar</button><button class="btn" onclick="fecharModal();ir('aniversariantes')">Ver tela de aniversariantes</button>`, true);
 }
 function pgAniv(){
-  const t = st.aniv.tab, h = hoje();
+  const a = st.aniv, t = a.tab, h = hoje(), anoAt = new Date().getFullYear();
   let dias = [];
   if(t === 'hoje') dias = [h];
   else if(t === '7') for(let i=1;i<=7;i++) dias.push(addDias(h,i));
-  else { const [y,m] = h.split('-').map(Number); const last = new Date(y,m,0).getDate(); for(let d=1; d<=last; d++) dias.push(h.slice(0,8)+pad(d)); }
+  else { const y = Number(a.ano), m = Number(a.mes), last = new Date(y,m,0).getDate(); for(let d=1; d<=last; d++) dias.push(y+'-'+pad(m)+'-'+pad(d)); }
+  const empF = isAdmin() && !curEmp()
+    ? `<div class="f"><label>Empresa</label><select onchange="st.aniv.emp=this.value;pgAniv()"><option value="">Todas</option>${db.empresas.filter(e=>e.ativo).map(e=>`<option value="${e.id}" ${String(a.emp)===String(e.id)?'selected':''}>${esc(e.nome)}</option>`).join('')}</select></div>`
+    : `<div class="f"><label>Empresa</label><select disabled><option>${esc(empNome(curEmp()))}</option></select></div>`;
   let html = `<div class="tabs">
-    <button class="${t==='hoje'?'on':''}" onclick="st.aniv.tab='hoje';pgAniv()">Hoje (${anivDoDia(h).length})</button>
+    <button class="${t==='hoje'?'on':''}" onclick="st.aniv.tab='hoje';pgAniv()">Hoje (${anivDoDia(h,true).length})</button>
     <button class="${t==='7'?'on':''}" onclick="st.aniv.tab='7';pgAniv()">Próximos 7 dias</button>
-    <button class="${t==='mes'?'on':''}" onclick="st.aniv.tab='mes';pgAniv()">${MESES[new Date().getMonth()]}</button>
-    <button class="btn sec" style="margin-left:auto" onclick="pdfAniv()">📄 Gerar PDF</button></div>`;
+    <button class="${t==='mes'?'on':''}" onclick="st.aniv.tab='mes';pgAniv()">${MESES[Number(a.mes)-1]}/${a.ano}</button>
+    <button class="btn sec" style="margin-left:auto" onclick="pdfAniv()">📄 Gerar PDF</button></div>
+  <div class="filters">${empF}${clsFiltro(a.cls, "st.aniv.cls=this.value;pgAniv()")}
+    <div class="f"><label>Mês</label><select onchange="st.aniv.mes=this.value;st.aniv.tab='mes';pgAniv()">${MESES.map((m,i)=>`<option value="${pad(i+1)}" ${a.mes===pad(i+1)?'selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="f"><label>Ano</label><select onchange="st.aniv.ano=Number(this.value);st.aniv.tab='mes';pgAniv()">${[anoAt-1,anoAt,anoAt+1].map(y=>`<option ${Number(a.ano)===y?'selected':''}>${y}</option>`).join('')}</select></div>
+  </div>`;
   let total = 0; st.pdfAniv = [];
   dias.forEach(d => {
-    const l = anivDoDia(d); if(!l.length) return; total += l.length;
+    const l = anivDoDia(d, true); if(!l.length) return; total += l.length;
     l.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).forEach(c => st.pdfAniv.push({ d, c }));
     const feitos = d === h ? l.filter(c => ligouHoje(c.id)).length : 0;
     html += `<div class="dayhead ${d===h?'today':''}">${d===h?'Hoje · ':''}${nomeDia(d)} ${fmtD(d)} <span class="tag">${l.length}</span>${d===h?` <span class="tag ok">${feitos} ligada(s)</span>`:''}</div>`;
@@ -683,33 +740,39 @@ function pgPainel(){
   let vends = vendsVisiveis();
   if(p.vend) vends = vends.filter(v => String(v.id) === String(p.vend));
   const vIds = new Set(vends.map(v => v.id));
-  const ligs = ligVisiveis().filter(l => dataDeTs(l.inicio).slice(0,7) === comp && vIds.has(l.vendedora_id));
+  const ligs = ligVisiveis().filter(l => dataDeTs(l.inicio).slice(0,7) === comp && vIds.has(l.vendedora_id) && clsOk(l.cliente_id, p.cls));
   vends = vends.filter(v => v.ativa || ligs.some(l => l.vendedora_id === v.id));
-  const fus = fuVisiveis().filter(f => vIds.has(f.vendedora_id));
+  const fus = fuVisiveis().filter(f => vIds.has(f.vendedora_id) && clsOk(f.cliente_id, p.cls));
+  const cliNovos = cliVisiveis().filter(c => c.data_cadastro && clsOk(c.id, p.cls));
+  const novosMes = cliNovos.filter(c => c.data_cadastro.slice(0,7) === comp).length;
+  const mesCorr = comp === h.slice(0,7), domingo = new Date().getDay() === 0;
   const duTot = diasUteis(comp), duAte = comp < h.slice(0,7) ? duTot : comp > h.slice(0,7) ? 0 : diasUteis(comp, h);
   const linhas = vends.map((v,i) => {
     const l = ligs.filter(x => x.vendedora_id === v.id), meta = metaDe(v.id, comp), real = l.length;
     const esperado = duTot ? Math.round(meta * duAte / duTot) : 0;
-    return { v, i, meta, real, esperado, efet: l.filter(x => efetivo(x.resultado)).length, dur: l.reduce((s,x)=>s+(x.duracao_seg||0),0),
+    return { v, i, meta, real, esperado, metaDia: duTot ? meta/duTot : 0, hj: l.filter(x => dataDeTs(x.inicio) === h).length, efet: l.filter(x => efetivo(x.resultado)).length, dur: l.reduce((s,x)=>s+(x.duracao_seg||0),0),
       fuOk: fus.filter(f => f.vendedora_id===v.id && f.status==='concluido' && f.concluido_em && dataDeTs(f.concluido_em).slice(0,7)===comp).length,
       fuPend: fus.filter(f => f.vendedora_id===v.id && f.status==='pendente' && f.data_prevista >= h).length,
       fuAtr: fus.filter(f => f.vendedora_id===v.id && f.status==='pendente' && f.data_prevista < h).length };
   });
-  const T = linhas.reduce((a,x) => ({ meta:a.meta+x.meta, real:a.real+x.real, esp:a.esp+x.esperado, efet:a.efet+x.efet, dur:a.dur+x.dur, atr:a.atr+x.fuAtr, pend:a.pend+x.fuPend }), {meta:0,real:0,esp:0,efet:0,dur:0,atr:0,pend:0});
+  const T = linhas.reduce((a,x) => ({ md:a.md+x.metaDia, hj:a.hj+x.hj, meta:a.meta+x.meta, real:a.real+x.real, esp:a.esp+x.esperado, efet:a.efet+x.efet, dur:a.dur+x.dur, atr:a.atr+x.fuAtr, pend:a.pend+x.fuPend }), {md:0,hj:0,meta:0,real:0,esp:0,efet:0,dur:0,atr:0,pend:0});
   const pm = pct(T.real, T.meta);
 
   $('content').innerHTML = `
   <div class="filters">
     <div class="f"><label>Competência</label><input type="month" value="${comp}" onchange="st.painel.comp=this.value||mesAtual();pgPainel()"></div>
-    ${isAdmin()?`<div class="f"><label>Vendedora</label><select onchange="st.painel.vend=this.value;pgPainel()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
-    <div class="f small muted" style="padding-bottom:9px">Dias úteis: ${duAte} de ${duTot}</div>
+    ${verVendFiltro()?`<div class="f"><label>Vendedora</label><select onchange="st.painel.vend=this.value;pgPainel()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
+    ${clsFiltro(p.cls, "st.painel.cls=this.value;pgPainel()")}
+    <div class="f small muted" style="padding-bottom:9px">Dias úteis (seg a sáb): ${duAte} de ${duTot}</div>
   </div>
   <div class="kpis">
     <div class="kpi"><div class="l">Ligações no mês</div><div class="v">${fmtN(T.real)}</div><div class="s">Meta: ${fmtN(T.meta)}</div></div>
     <div class="kpi ${pm>=100?'ok':T.real>=T.esp?'info':'bad'}"><div class="l">% da meta</div><div class="v">${pm}%</div><div class="s">Ritmo esperado hoje: ${fmtN(T.esp)}</div></div>
+    <div class="kpi info"><div class="l">Meta diária</div><div class="v">${fmtDec(T.md)}</div><div class="s">${mesCorr ? (domingo ? 'Domingo: sem meta' : 'Hoje: '+fmtN(T.hj)+' ligação(ões)') : duTot+' dias úteis (seg a sáb)'}</div></div>
     <div class="kpi ok"><div class="l">Contatos efetivos</div><div class="v">${fmtN(T.efet)}</div><div class="s">${pct(T.efet,T.real)}% das ligações atendidas</div></div>
     <div class="kpi dk"><div class="l">Tempo em ligação</div><div class="v">${fmtDur(T.dur)}</div><div class="s">Média ${fmtDur(T.real?T.dur/T.real:0)} por ligação</div></div>
     <div class="kpi bad click" onclick="st.plan.filtro='atrasados';ir('planejamento')"><div class="l">Follow-ups atrasados</div><div class="v">${fmtN(T.atr)}</div><div class="s">${fmtN(T.pend)} pendentes a partir de hoje</div></div>
+    <div class="kpi dk"><div class="l">Clientes novos no mês</div><div class="v">${fmtN(novosMes)}</div><div class="s">Cadastrados em ${MESES[Number(comp.slice(5))-1]}/${comp.slice(0,4)}</div></div>
     <div class="kpi warn click" onclick="st.aniv.tab='hoje';ir('aniversariantes')"><div class="l">Aniversariantes hoje</div><div class="v">${anivDoDia(h).length}</div><div class="s">${anivDoDia(h).filter(c=>ligouHoje(c.id)).length} já ligadas</div></div>
   </div>
   <div class="grid g2">
@@ -718,12 +781,13 @@ function pgPainel(){
     <div class="card"><h3>Resultado das ligações</h3><div class="chartbox"><canvas id="ch3"></canvas></div></div>
     <div class="card"><h3>Follow-ups por vendedora</h3><div class="chartbox"><canvas id="ch4"></canvas></div></div>
   </div>
+  <div class="card" style="margin-top:14px"><h3>Clientes novos por mês</h3><div class="chartbox"><canvas id="ch5"></canvas></div><div class="small muted" style="margin-top:6px">Conta os clientes pela data do cadastro (cadastros feitos a partir desta versão).</div></div>
   <div class="card" style="margin-top:14px"><h3>Ranking de vendedoras — ${MESES[Number(comp.slice(5))-1]}/${comp.slice(0,4)}</h3>
-  <div class="tbl-wrap" style="border:0"><table><thead><tr><th>#</th><th>Vendedora</th><th>Empresa</th><th class="num">Meta</th><th class="num">Realizado</th><th>Atingimento</th><th class="num">Ritmo esperado</th><th>Situação</th><th class="num">Efetivos</th><th class="num">Follow-ups atrasados</th></tr></thead><tbody>
+  <div class="tbl-wrap" style="border:0"><table><thead><tr><th>#</th><th>Vendedora</th><th>Empresa</th><th class="num">Meta</th><th class="num">Meta/dia</th><th class="num">Hoje</th><th class="num">Realizado</th><th>Atingimento</th><th class="num">Ritmo esperado</th><th>Situação</th><th class="num">Efetivos</th><th class="num">Follow-ups atrasados</th></tr></thead><tbody>
   ${linhas.slice().sort((a,b)=>pct(b.real,b.meta)-pct(a.real,a.meta)||b.real-a.real).map((x,k)=>{ const pp = pct(x.real,x.meta); const sit = !x.meta ? '<span class="tag">Sem meta</span>' : pp>=100 ? '<span class="tag ok">Meta batida</span>' : x.real>=x.esperado ? '<span class="tag info">No ritmo</span>' : '<span class="tag bad">Abaixo do ritmo</span>';
-    return `<tr><td>${k+1}</td><td><b>${esc(x.v.nome)}</b></td><td>${empTag(x.v.empresa_id)}</td><td class="num">${fmtN(x.meta)}</td><td class="num"><b>${fmtN(x.real)}</b></td>
+    return `<tr><td>${k+1}</td><td><b>${esc(x.v.nome)}</b></td><td>${empTag(x.v.empresa_id)}</td><td class="num">${fmtN(x.meta)}</td><td class="num">${fmtDec(x.metaDia)}</td><td class="num">${mesCorr && !domingo ? `<span class="tag ${x.hj>=x.metaDia&&x.metaDia>0?'ok':''}">${fmtN(x.hj)}</span>` : '<span class="muted">—</span>'}</td><td class="num"><b>${fmtN(x.real)}</b></td>
     <td><div style="display:flex;gap:8px;align-items:center"><div class="prog ${pp>=100?'ok':''}" style="flex:1"><div style="width:${Math.min(pp,100)}%"></div></div><b>${pp}%</b></div></td>
-    <td class="num">${fmtN(x.esperado)}</td><td>${sit}</td><td class="num">${fmtN(x.efet)}</td><td class="num">${x.fuAtr?`<span class="tag bad">${x.fuAtr}</span>`:'0'}</td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
+    <td class="num">${fmtN(x.esperado)}</td><td>${sit}</td><td class="num">${fmtN(x.efet)}</td><td class="num">${x.fuAtr?`<span class="tag bad">${x.fuAtr}</span>`:'0'}</td></tr>`; }).join('') || '<tr><td colspan="12" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
   </tbody></table></div></div>`;
 
   if(typeof Chart === 'undefined') return;
@@ -751,12 +815,22 @@ function pgPainel(){
       { label:'Pendentes', data: linhas.map(x=>x.fuPend), backgroundColor:'#F59E0B', borderRadius:4 },
       { label:'Atrasados', data: linhas.map(x=>x.fuAtr), backgroundColor:'#DC2626', borderRadius:4 } ] },
     options:{ maintainAspectRatio:false, scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } } } }));
+
+  const addMes = (c, n) => { const d = new Date(Number(c.slice(0,4)), Number(c.slice(5))-1+n, 1); return d.getFullYear()+'-'+pad(d.getMonth()+1); };
+  const prim = cliNovos.reduce((m,c) => { const k = c.data_cadastro.slice(0,7); return !m || k < m ? k : m; }, null);
+  let ini = addMes(comp, -11); if(!prim || prim > comp) ini = comp; else if(prim > ini) ini = prim;
+  const meses = []; for(let c = ini; c <= comp; c = addMes(c,1)) meses.push(c);
+  const lblM = meses.map(c => MESES[Number(c.slice(5))-1].slice(0,3)+'/'+c.slice(2,4));
+  const empsN = curEmp() ? [M.emp[curEmp()]].filter(Boolean) : db.empresas.filter(e => e.ativo);
+  st.charts.push(new Chart($('ch5'), { type:'bar', data:{ labels: lblM, datasets: empsN.map(e => ({ label:e.nome, backgroundColor:e.cor||'#F2701A', borderRadius:4,
+      data: meses.map(m => cliNovos.filter(c => c.empresa_id === e.id && c.data_cadastro.slice(0,7) === m).length) })) },
+    options:{ maintainAspectRatio:false, scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, ticks:{ precision:0 } } }, plugins:{ legend:{ display: empsN.length > 1 } } } }));
 }
 
 /* ============================ PLANEJAMENTO (FOLLOW-UP) ============================ */
 function pgPlan(){
   const p = st.plan, h = hoje(), f7 = addDias(h,7), comp = mesAtual();
-  const base = fuVisiveis().filter(f => !p.vend || String(f.vendedora_id) === String(p.vend));
+  const base = fuVisiveis().filter(f => (!p.vend || String(f.vendedora_id) === String(p.vend)) && clsOk(f.cliente_id, p.cls));
   const cnt = {
     atrasados: base.filter(f => f.status==='pendente' && f.data_prevista < h).length,
     hoje: base.filter(f => f.status==='pendente' && f.data_prevista === h).length,
@@ -787,10 +861,12 @@ function pgPlan(){
   <div class="filters">
     <div class="f"><label>Exibir</label><select onchange="st.plan.filtro=this.value;pgPlan()">
       ${[['ate_hoje','Pendentes até hoje'],['atrasados','Atrasados'],['hoje','Hoje'],['semana','Próximos 7 dias'],['pendentes','Todos os pendentes'],['concluidos','Concluídos'],['cancelados','Cancelados']].map(([v,t])=>`<option value="${v}" ${p.filtro===v?'selected':''}>${t}</option>`).join('')}</select></div>
-    ${isAdmin()?`<div class="f"><label>Vendedora</label><select onchange="st.plan.vend=this.value;pgPlan()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
+    ${verVendFiltro()?`<div class="f"><label>Vendedora</label><select onchange="st.plan.vend=this.value;pgPlan()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
+    ${clsFiltro(p.cls, "st.plan.cls=this.value;pgPlan()")}
     <div class="f grow"><label>Buscar</label><input id="planQ" value="${esc(p.q)}" placeholder="Cliente, telefone ou descrição" oninput="st.plan.q=this.value;clearTimeout(window._pq);window._pq=setTimeout(()=>{pgPlan();const i=$('planQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)},300)"></div>
     ${planToggle()}
     <button class="btn sec" onclick="pdfPlan()">📄 Gerar PDF</button>
+    <button class="btn sec" onclick="ir('planejar')">📋 Planejar em lote</button>
     <button class="btn" onclick="abrirFollowup({})">+ Novo follow-up</button>
   </div>`;
   if(!l.length) html += '<div class="card empty">Nenhum follow-up neste filtro.</div>';
@@ -801,7 +877,7 @@ function pgPlan(){
     const stTag = f.status==='concluido' ? '<span class="tag ok">Concluído</span>' : f.status==='cancelado' ? '<span class="tag">Cancelado</span>' : late ? '<span class="tag bad">Atrasado</span>' : '<span class="tag warn">Pendente</span>';
     html += `<div class="fu ${f.status==='concluido'?'done':f.status==='cancelado'?'canc':late?'late':''}">
       <div class="hr">${f.hora ? f.hora.slice(0,5) : '--:--'}</div>
-      <div class="bd"><b>${esc(c.nome||'(cliente)')}</b> <span class="tag or">${esc(f.motivo)}</span> ${stTag} ${curEmp()?'':empTag(f.empresa_id)}
+      <div class="bd"><b>${esc(c.nome||'(cliente)')}</b> ${clsTag(c)} <span class="tag or">${esc(f.motivo)}</span> ${stTag} ${curEmp()?'':empTag(f.empresa_id)}
         ${f.descricao?`<div class="ds">${esc(f.descricao)}</div>`:''}
         <div class="mt"><span>👩‍💼 ${esc(vendNome(f.vendedora_id))}</span><span class="phone">📞 ${esc([c.celular,c.telefone].filter(Boolean).join(' · ')||'sem telefone')}</span>${f.status==='concluido'&&f.concluido_em?`<span>✔ ${fmtDH(f.concluido_em)}</span>`:''}</div></div>
       <div class="ac">
@@ -811,6 +887,91 @@ function pgPlan(){
   });
   if(total > lim) html += `<p class="muted small">Exibindo ${lim} de ${total}. Use os filtros para refinar.</p>`;
   $('content').innerHTML = html;
+}
+
+/* ============================ PLANEJAR LIGAÇÕES (vários clientes de uma vez) ============================ */
+function ehAniv(c, iso){
+  if(!c.data_nascimento) return false;
+  const alvo = iso.slice(5,10), ano = Number(iso.slice(0,4)), bis = (ano%4===0 && ano%100!==0) || ano%400===0, md = c.data_nascimento.slice(5,10);
+  return md === alvo || (!bis && md === '02-29' && alvo === '02-28');
+}
+function pgPlanejar(){
+  const p = st.pl, vs = vendsVisiveis(true);
+  if(p.vend && !vs.some(x => String(x.id) === String(p.vend))){ p.vend = ''; p.sel = new Set(); }
+  if(!p.vend && vs.length === 1) p.vend = String(vs[0].id);
+  const v = p.vend ? M.vend[Number(p.vend)] : null;
+  let html = `<div class="card" style="margin-bottom:14px"><h3>1. O que agendar</h3><div class="form f4">
+    <div><label>Vendedora *</label><select onchange="st.pl.vend=this.value;st.pl.sel=new Set();pgPlanejar()" ${vs.length===1?'disabled':''}>${vendOptions(p.vend,'Selecione…')}</select></div>
+    <div><label>Data da ligação *</label><input type="date" value="${p.data}" onchange="st.pl.data=this.value||hoje();pgPlanejar()"></div>
+    <div><label>Hora (opcional)</label><input type="time" value="${p.hora}" onchange="st.pl.hora=this.value"></div>
+    <div><label>Motivo</label><select onchange="st.pl.motivo=this.value">${MOTIVOS.map(m=>`<option ${p.motivo===m?'selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="full"><label>Descrição / o que falar</label><input value="${esc(p.desc)}" oninput="st.pl.desc=this.value" placeholder="Vale para todos os clientes marcados"></div>
+    <div class="full"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin:0"><input type="checkbox" style="width:18px;height:18px;accent-color:var(--or)" ${p.anivMot?'checked':''} onchange="st.pl.anivMot=this.checked"> Aniversariantes da data entram com o motivo "Aniversário"</label></div>
+  </div></div>`;
+  if(!v){ $('content').innerHTML = html + '<div class="card empty">Selecione a vendedora para listar os clientes da empresa dela.</div>'; return; }
+  const q = p.q.trim().toLowerCase(), qd = q.replace(/\D/g,''), nome = (a,b) => a.nome.localeCompare(b.nome);
+  const cl = db.clientes.filter(c => c.ativo && c.empresa_id === v.empresa_id && clsOk(c.id, p.cls)
+    && (!p.cart || (p.cart === 'dela' ? c.vendedora_id === v.id : !c.vendedora_id))
+    && (!q || c.nome.toLowerCase().includes(q) || (qd.length >= 4 && (discar(c.celular).includes(qd) || discar(c.telefone).includes(qd)))));
+  const pend = {}; fuVisiveis().filter(f => f.status === 'pendente').forEach(f => { if(!pend[f.cliente_id] || f.data_prevista < pend[f.cliente_id].data_prevista) pend[f.cliente_id] = f; });
+  const s1 = cl.filter(c => ehAniv(c, p.data)).sort(nome), s2 = [];
+  for(let i = 1; i <= 7; i++){ const d = addDias(p.data, i); cl.filter(c => ehAniv(c, d)).sort(nome).forEach(c => s2.push({ c, d })); }
+  const jaAniv = new Set([...s1.map(c => c.id), ...s2.map(x => x.c.id)]), s3all = cl.filter(c => !jaAniv.has(c.id)).sort(nome), lim = 200, s3 = s3all.slice(0, lim);
+  const row = (c, extra) => { const u = M.ultLig[c.id], pf = pend[c.id];
+    return `<tr><td style="width:40px"><input type="checkbox" class="plCk" data-id="${c.id}" ${p.sel.has(c.id)?'checked':''} onchange="plMarcar(${c.id}, this.checked)"></td>
+      <td><b>${esc(c.nome)}</b> ${clsTag(c)} ${extra||''}${pf?` <span class="tag warn" title="${esc(vendNome(pf.vendedora_id))}">📅 ${fmtDM(pf.data_prevista)} pendente</span>`:''}</td>
+      <td class="phone">${esc([c.celular,c.telefone].filter(Boolean).join(' · ')) || '<span class="muted">—</span>'}</td>
+      <td>${c.data_nascimento?fmtD(c.data_nascimento):'<span class="muted">—</span>'}</td>
+      <td class="small">${u?fmtDH(u.inicio)+'<br><span class="muted">'+esc(u.resultado)+'</span>':'<span class="muted">—</span>'}</td>
+      <td class="small">${c.vendedora_id?esc(vendNome(c.vendedora_id)):'<span class="muted">—</span>'}</td></tr>`; };
+  const secao = (tit, cls, ids, linhas, obs) => `<div class="dayhead ${cls}">${tit} <span class="tag">${ids.length}</span>
+      ${ids.length?`<button class="btn sec sm" onclick="plMarcarVarios([${ids.join(',')}],true)">Marcar todos</button><button class="btn sec sm" onclick="plMarcarVarios([${ids.join(',')}],false)">Desmarcar</button>`:''}</div>
+    <div class="tbl-wrap"><table><thead><tr><th></th><th>Cliente</th><th>Telefones</th><th>Nascimento</th><th>Última ligação</th><th>Carteira</th></tr></thead><tbody>${linhas || '<tr><td colspan="6" class="empty">Nenhum cliente.</td></tr>'}</tbody></table></div>${obs||''}`;
+  html += `<div class="card"><h3>2. Escolha os clientes · ${esc(empNome(v.empresa_id))}</h3>
+    <div class="filters">
+      <div class="f grow"><label>Buscar</label><input id="plQ" value="${esc(p.q)}" placeholder="Nome ou telefone" oninput="st.pl.q=this.value;clearTimeout(window._plq);window._plq=setTimeout(()=>{pgPlanejar();const i=$('plQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)},300)"></div>
+      ${clsFiltro(p.cls, "st.pl.cls=this.value;pgPlanejar()")}
+      <div class="f"><label>Carteira</label><select onchange="st.pl.cart=this.value;pgPlanejar()"><option value="">Todas</option><option value="dela" ${p.cart==='dela'?'selected':''}>Da vendedora</option><option value="sem" ${p.cart==='sem'?'selected':''}>Sem carteira</option></select></div>
+      <button class="btn sec" onclick="plMarcarVarios([],false,true)">Limpar seleção</button>
+    </div>
+    ${secao(`🎂 Aniversariantes em ${nomeDia(p.data)} ${fmtD(p.data)}`, 'today', s1.map(c => c.id), s1.map(c => row(c, `<span class="tag or">faz ${idadeEm(c, p.data)} anos</span>`)).join(''))}
+    ${secao('🎂 Aniversariantes nos 7 dias seguintes', '', s2.map(x => x.c.id), s2.map(x => row(x.c, `<span class="tag">${nomeDia(x.d).slice(0,3)} ${fmtDM(x.d)}</span>`)).join(''))}
+    ${secao('Demais clientes', '', s3.map(c => c.id), s3.map(c => row(c)).join(''), s3all.length > lim ? `<p class="muted small">Exibindo ${lim} de ${fmtN(s3all.length)}. Use a busca, a classificação ou a carteira para achar os demais.</p>` : '')}
+  </div>
+  <div class="pl-bar"><span id="plCnt"></span><span class="small muted" id="plInfo"></span><button class="btn" id="plOk" onclick="plCriar()">Criar follow-ups</button></div>`;
+  $('content').innerHTML = html; plAtualizar();
+}
+function plAtualizar(){
+  const p = st.pl, v = M.vend[Number(p.vend)], n = p.sel.size; if(!$('plCnt')) return;
+  const nAniv = [...p.sel].filter(id => M.cli[id] && ehAniv(M.cli[id], p.data)).length;
+  $('plCnt').textContent = `${fmtN(n)} cliente(s) marcado(s)`;
+  $('plInfo').textContent = n && v ? `para ${v.nome} em ${fmtD(p.data)}${nAniv?` · ${nAniv} aniversariante(s)`:''}` : '';
+  $('plOk').disabled = !n; $('plOk').textContent = n ? `Criar ${fmtN(n)} follow-up(s)` : 'Criar follow-ups';
+}
+function plMarcar(id, on){ if(on) st.pl.sel.add(id); else st.pl.sel.delete(id); plAtualizar(); }
+function plMarcarVarios(ids, on, tudo){
+  if(tudo) st.pl.sel = new Set(); else ids.forEach(id => on ? st.pl.sel.add(id) : st.pl.sel.delete(id));
+  document.querySelectorAll('.plCk').forEach(i => { if(tudo || ids.includes(Number(i.dataset.id))) i.checked = !tudo && on; });
+  plAtualizar();
+}
+async function plCriar(){
+  const p = st.pl, v = M.vend[Number(p.vend)];
+  if(!v) return toast('Selecione a vendedora.', 'err');
+  if(!p.data) return toast('Informe a data.', 'err');
+  const ids = [...p.sel].filter(id => M.cli[id] && M.cli[id].empresa_id === v.empresa_id);
+  if(!ids.length) return toast('Marque pelo menos um cliente.', 'err');
+  ids.sort((a,b) => ehAniv(M.cli[b], p.data) - ehAniv(M.cli[a], p.data) || M.cli[a].nome.localeCompare(M.cli[b].nome));
+  const rows = ids.map(id => ({ empresa_id:v.empresa_id, cliente_id:id, vendedora_id:v.id, data_prevista:p.data, hora:p.hora || null,
+    motivo: (p.anivMot && ehAniv(M.cli[id], p.data)) ? 'Aniversário' : p.motivo, descricao: p.desc.trim() || null }));
+  $('plOk').disabled = true; $('plOk').textContent = 'Criando…';
+  try{
+    for(let i = 0; i < rows.length; i += 500){
+      const r = await sbFetch('/rest/v1/followups', { method:'POST', body:rows.slice(i, i+500), headers:{ Prefer:'return=representation' } });
+      (r||[]).forEach(f => db.followups.push(f));
+    }
+    p.sel = new Set(); montarNav(); pgPlanejar();
+    toast(`${fmtN(rows.length)} follow-up(s) criado(s) para ${v.nome} em ${fmtD(p.data)}.`, 'ok');
+  }catch(e){ toast(e.message, 'err'); plAtualizar(); }
 }
 
 /* ---------- Planejamento: visão semanal com arrastar e soltar ---------- */
@@ -828,7 +989,7 @@ function pgPlanSemana(base, kpis){
   const cardH = f => { const c = M.cli[f.cliente_id]||{}, pend = f.status==='pendente', late = pend && f.data_prevista < h;
     return `<div class="wk-card ${f.status==='concluido'?'done':late?'late':''}" data-id="${f.id}" ${pend?'data-drag="1"':''}>
       <div class="wk-top"><span class="hr">${f.hora?f.hora.slice(0,5):(late&&f.data_prevista<ini?fmtDM(f.data_prevista):'')}</span><span class="tag or">${esc(f.motivo)}</span></div>
-      <b>${esc(c.nome||'(cliente)')}</b>
+      <b>${esc(c.nome||'(cliente)')}</b> ${clsTag(c)}
       ${f.descricao?`<div class="wk-ds">${esc(f.descricao)}</div>`:''}
       <div class="small muted">👩‍💼 ${esc(vendNome(f.vendedora_id))}${curEmp()?'':' · '+esc(empNome(f.empresa_id))}</div>
       <div class="wk-ac">${pend ? `<button class="btn sec sm" onclick="abrirFollowup({id:${f.id}})">✎</button><button class="playbtn" title="Iniciar ligação" onclick="abrirLigacao({followupId:${f.id}})">▶</button>` : '<span class="tag ok">Concluído</span>'}</div></div>`; };
@@ -840,10 +1001,12 @@ function pgPlanSemana(base, kpis){
   st.pdfPlan = { itens: [...atr, ...dias.flatMap(d => l.filter(f => f.data_prevista === d).sort(ord))], desc: 'Semana de '+fmtDM(dias[0])+' a '+fmtD(dias[6])+(atr.length?' (inclui atrasados anteriores)':'') };
   $('content').innerHTML = kpis + `
   <div class="filters">
-    ${isAdmin()?`<div class="f"><label>Vendedora</label><select onchange="st.plan.vend=this.value;pgPlan()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
+    ${verVendFiltro()?`<div class="f"><label>Vendedora</label><select onchange="st.plan.vend=this.value;pgPlan()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
+    ${clsFiltro(p.cls, "st.plan.cls=this.value;pgPlan()")}
     <div class="f grow"><label>Buscar</label><input id="planQ" value="${esc(p.q)}" placeholder="Cliente, telefone ou descrição" oninput="st.plan.q=this.value;clearTimeout(window._pq);window._pq=setTimeout(()=>{pgPlan();const i=$('planQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)},300)"></div>
     ${planToggle()}
     <button class="btn sec" onclick="pdfPlan()">📄 Gerar PDF</button>
+    <button class="btn sec" onclick="ir('planejar')">📋 Planejar em lote</button>
     <button class="btn" onclick="abrirFollowup({})">+ Novo follow-up</button>
   </div>
   <div class="wk-nav">
@@ -934,12 +1097,12 @@ function abrirFollowup({ id, clienteId, motivo, data }){
   const cid = f ? f.cliente_id : clienteId;
   const cli = cid ? M.cli[cid] : null;
   const emp = f ? f.empresa_id : cli ? cli.empresa_id : (curEmp() || (db.empresas[0]||{}).id);
-  const vend = f ? f.vendedora_id : isAdmin() ? ((cli && cli.vendedora_id) || '') : db.me.vendedora_id;
+  const mv = minhas(), vend = f ? f.vendedora_id : isAdmin() ? ((cli && cli.vendedora_id) || '') : mv.length === 1 ? mv[0] : (cli && mv.includes(cli.vendedora_id) ? cli.vendedora_id : '');
   const empOpts = db.empresas.filter(e => e.ativo && empOk(e.id)).map(e => `<option value="${e.id}" ${e.id===emp?'selected':''}>${esc(e.nome)}</option>`).join('');
   abrirModal(f ? 'Editar follow-up' : 'Novo follow-up',
     `<div class="form">
       <div><label>Empresa</label><select id="fuEmp" ${isAdmin()&&!f?'':'disabled'} onchange="fuEmpChange()">${empOpts}</select></div>
-      <div><label>Vendedora responsável</label><select id="fuVend" ${isAdmin()?'':'disabled'}>${isAdmin()?vendOptions(vend,'Selecione…',emp):`<option value="${db.me.vendedora_id}">${esc(vendNome(db.me.vendedora_id))}</option>`}</select></div>
+      <div><label>Vendedora responsável</label><select id="fuVend" ${verVendFiltro()?'':'disabled'}>${verVendFiltro()?vendOptions(vend,'Selecione…',emp):`<option value="${mv[0]}">${esc(vendNome(mv[0]))}</option>`}</select></div>
       <div class="full"><label>Cliente</label>${f ? `<input value="${esc(cli?cli.nome:'')}" disabled><input type="hidden" id="pkId" value="${cid}">` : clientePickerHTML(cid)}</div>
       <div><label>Data prevista</label><input type="date" id="fuData" value="${f?f.data_prevista:(data||hoje())}"></div>
       <div><label>Hora (opcional)</label><input type="time" id="fuHora" value="${f&&f.hora?f.hora.slice(0,5):''}"></div>
@@ -977,7 +1140,7 @@ async function cancelarFU(id){
 function abrirLigacao({ followupId, clienteId, motivo }){
   const fu = followupId ? db.followups.find(f => f.id === followupId) : null;
   const c = M.cli[fu ? fu.cliente_id : clienteId]; if(!c) return toast('Cliente não encontrado.', 'err');
-  const vendFixa = fu ? fu.vendedora_id : (!isAdmin() ? db.me.vendedora_id : null);
+  const vendFixa = fu ? fu.vendedora_id : (!isAdmin() && minhas().length === 1 ? minhas()[0] : null);
   st.call = { fu, c, motivo: fu ? fu.motivo : (motivo || 'Retorno'), t0:null, t1:null, iv:null };
   const ult = M.ultLig[c.id];
   const vendSel = vendFixa ? `<div class="box-info">👩‍💼 Vendedora: <b>${esc(vendNome(vendFixa))}</b></div><input type="hidden" id="cVend" value="${vendFixa}">`
@@ -1047,6 +1210,7 @@ function ligFiltradas(){
   return ligVisiveis().filter(l => { const d = dataDeTs(l.inicio);
     if(p.de && d < p.de) return false; if(p.ate && d > p.ate) return false;
     if(p.vend && String(l.vendedora_id) !== String(p.vend)) return false;
+    if(!clsOk(l.cliente_id, p.cls)) return false;
     if(p.res === '_efet' && !efetivo(l.resultado)) return false;
     if(p.res && p.res !== '_efet' && l.resultado !== p.res) return false;
     if(q){ const c = M.cli[l.cliente_id]||{}; if(!(c.nome||'').toLowerCase().includes(q) && !(l.descricao||'').toLowerCase().includes(q)) return false; }
@@ -1059,7 +1223,8 @@ function pgLig(){
   <div class="filters">
     <div class="f"><label>De</label><input type="date" value="${p.de}" onchange="st.lig.de=this.value;pgLig()"></div>
     <div class="f"><label>Até</label><input type="date" value="${p.ate}" onchange="st.lig.ate=this.value;pgLig()"></div>
-    ${isAdmin()?`<div class="f"><label>Vendedora</label><select onchange="st.lig.vend=this.value;pgLig()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
+    ${verVendFiltro()?`<div class="f"><label>Vendedora</label><select onchange="st.lig.vend=this.value;pgLig()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
+    ${clsFiltro(p.cls, "st.lig.cls=this.value;pgLig()")}
     <div class="f"><label>Resultado</label><select onchange="st.lig.res=this.value;pgLig()"><option value="">Todos</option><option value="_efet" ${p.res==='_efet'?'selected':''}>Somente atendidas</option>${RESULTADOS.map(r=>`<option ${p.res===r?'selected':''}>${r}</option>`).join('')}</select></div>
     <div class="f grow"><label>Buscar</label><input id="ligQ" value="${esc(p.q)}" placeholder="Cliente ou descrição" oninput="st.lig.q=this.value;clearTimeout(window._lq);window._lq=setTimeout(()=>{pgLig();const i=$('ligQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)},300)"></div>
     <button class="btn sec" onclick="exportLig()">⬇ Exportar CSV</button>
@@ -1071,7 +1236,7 @@ function pgLig(){
     <div class="kpi dk"><div class="l">Tempo total</div><div class="v">${fmtDur(dur)}</div><div class="s">Média ${fmtDur(l.length?dur/l.length:0)}</div></div>
   </div>
   <div class="tbl-wrap"><table><thead><tr><th>Data/hora</th><th>Cliente</th>${curEmp()?'':'<th>Empresa</th>'}<th>Vendedora</th><th>Motivo</th><th>Resultado</th><th class="num">Duração</th><th>Descrição</th></tr></thead><tbody>
-  ${l.slice(0,lim).map(x => `<tr id="lig-${x.id}" class="${st.hlLig===x.id?'hl':''}"><td style="white-space:nowrap">${fmtDH(x.inicio)}</td><td><b>${esc(cliNome(x.cliente_id))}</b></td>${curEmp()?'':`<td>${empTag(x.empresa_id)}</td>`}<td>${esc(vendNome(x.vendedora_id))}</td>
+  ${l.slice(0,lim).map(x => `<tr id="lig-${x.id}" class="${st.hlLig===x.id?'hl':''}"><td style="white-space:nowrap">${fmtDH(x.inicio)}</td><td><b>${esc(cliNome(x.cliente_id))}</b> ${clsTag(M.cli[x.cliente_id])}</td>${curEmp()?'':`<td>${empTag(x.empresa_id)}</td>`}<td>${esc(vendNome(x.vendedora_id))}</td>
     <td>${x.motivo?`<span class="tag or">${esc(x.motivo)}</span>`:''}${x.followup_id?' <span class="tag info" title="Originada de follow-up">FU</span>':''}</td>
     <td><span class="tag ${efetivo(x.resultado)?'ok':x.resultado==='Número inválido'?'bad':''}">${esc(x.resultado)}</span></td><td class="num">${fmtDur(x.duracao_seg)}</td><td style="min-width:220px">${esc(x.descricao)}</td></tr>`).join('') || `<tr><td colspan="8" class="empty">Nenhuma ligação no período.</td></tr>`}
   </tbody></table></div>${l.length>lim?`<p class="muted small">Exibindo ${lim} de ${l.length}. Exporte o CSV para ver todas.</p>`:''}`;
@@ -1089,6 +1254,7 @@ function pgCli(){
   const p = st.cli, q = p.q.trim().toLowerCase(), qd = q.replace(/\D/g,''), porPag = 50;
   let l = cliVisiveis().filter(c => {
     if(p.mes && (!c.data_nascimento || c.data_nascimento.slice(5,7) !== p.mes)) return false;
+    if(!clsOk(c.id, p.cls)) return false;
     if(q && !c.nome.toLowerCase().includes(q) && !(qd.length>=4 && (discar(c.celular).includes(qd) || discar(c.telefone).includes(qd)))) return false;
     return true; }).sort((a,b) => p.mes ? (a.data_nascimento.slice(8)).localeCompare(b.data_nascimento.slice(8)) || a.nome.localeCompare(b.nome) : a.nome.localeCompare(b.nome));
   const pags = Math.max(1, Math.ceil(l.length/porPag)); if(p.pag >= pags) p.pag = pags-1;
@@ -1097,16 +1263,17 @@ function pgCli(){
   <div class="filters">
     <div class="f grow"><label>Buscar</label><input id="cliQ" value="${esc(p.q)}" placeholder="Nome ou telefone" oninput="st.cli.q=this.value;st.cli.pag=0;clearTimeout(window._cq);window._cq=setTimeout(()=>{pgCli();const i=$('cliQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)},300)"></div>
     <div class="f"><label>Aniversário no mês</label><select onchange="st.cli.mes=this.value;st.cli.pag=0;pgCli()"><option value="">Todos</option>${MESES.map((m,i)=>`<option value="${pad(i+1)}" ${p.mes===pad(i+1)?'selected':''}>${m}</option>`).join('')}</select></div>
+    ${clsFiltro(p.cls, "st.cli.cls=this.value;st.cli.pag=0;pgCli()")}
     <button class="btn sec" onclick="pdfCli()">📄 Gerar PDF</button>
     ${isAdmin()?'<button class="btn sec" onclick="abrirImportacao()">⬆ Importar planilha</button>':''}
     <button class="btn" onclick="abrirCliente()">+ Novo cliente</button>
   </div>
   <div class="small muted" style="margin-bottom:8px">${fmtN(l.length)} cliente(s)</div>
-  <div class="tbl-wrap"><table><thead><tr><th>Nome</th>${curEmp()?'':'<th>Empresa</th>'}<th>Celular</th><th>Telefone</th><th>Nascimento</th><th>Última ligação</th><th></th></tr></thead><tbody>
-  ${vis.map(c => { const u = M.ultLig[c.id]; return `<tr${c.ativo?'':' style="opacity:.5"'}><td><b>${esc(c.nome)}</b>${c.vendedora_id?`<div class="small muted">Carteira: ${esc(vendNome(c.vendedora_id))}</div>`:''}</td>${curEmp()?'':`<td>${empTag(c.empresa_id)}</td>`}
-    <td class="phone">${esc(c.celular)}</td><td class="phone">${esc(c.telefone)}</td><td>${c.data_nascimento?fmtD(c.data_nascimento):'<span class="muted">—</span>'}</td>
+  <div class="tbl-wrap"><table><thead><tr><th>Nome</th>${curEmp()?'':'<th>Empresa</th>'}<th>Celular</th><th>Telefone</th><th>Nascimento</th><th>Cadastro</th><th>Última ligação</th><th></th></tr></thead><tbody>
+  ${vis.map(c => { const u = M.ultLig[c.id]; return `<tr${c.ativo?'':' style="opacity:.5"'}><td><b>${esc(c.nome)}</b> ${clsTag(c)}${c.vendedora_id?`<div class="small muted">Carteira: ${esc(vendNome(c.vendedora_id))}</div>`:''}</td>${curEmp()?'':`<td>${empTag(c.empresa_id)}</td>`}
+    <td class="phone">${esc(c.celular)}</td><td class="phone">${esc(c.telefone)}</td><td>${c.data_nascimento?fmtD(c.data_nascimento):'<span class="muted">—</span>'}</td><td>${c.data_cadastro?fmtD(c.data_cadastro):'<span class="muted">—</span>'}</td>
     <td class="small">${u?fmtDH(u.inicio)+'<br><span class="muted">'+esc(u.resultado)+'</span>':'<span class="muted">—</span>'}</td>
-    <td class="act"><button class="btn sec sm" title="Histórico" onclick="historicoCli(${c.id})">🕘</button> <button class="btn sec sm" title="Editar" onclick="abrirCliente(${c.id})">✎</button> <button class="btn sec sm" onclick="abrirFollowup({clienteId:${c.id}})">📅 Follow-up</button> <button class="playbtn" style="width:32px;height:32px;font-size:13px;vertical-align:middle" title="Ligar agora" onclick="abrirLigacao({clienteId:${c.id}})">▶</button></td></tr>`; }).join('') || `<tr><td colspan="7" class="empty">Nenhum cliente encontrado.</td></tr>`}
+    <td class="act"><button class="btn sec sm" title="Histórico" onclick="historicoCli(${c.id})">🕘</button> <button class="btn sec sm" title="Editar" onclick="abrirCliente(${c.id})">✎</button> <button class="btn sec sm" onclick="abrirFollowup({clienteId:${c.id}})">📅 Follow-up</button> <button class="playbtn" style="width:32px;height:32px;font-size:13px;vertical-align:middle" title="Ligar agora" onclick="abrirLigacao({clienteId:${c.id}})">▶</button></td></tr>`; }).join('') || `<tr><td colspan="8" class="empty">Nenhum cliente encontrado.</td></tr>`}
   </tbody></table></div>
   <div class="pager"><button class="btn sec sm" ${p.pag<=0?'disabled':''} onclick="st.cli.pag--;pgCli()">‹ Anterior</button><span class="small">Página ${p.pag+1} de ${pags}</span><button class="btn sec sm" ${p.pag>=pags-1?'disabled':''} onclick="st.cli.pag++;pgCli()">Próxima ›</button></div>`;
 }
@@ -1207,13 +1374,15 @@ function abrirCliente(id){
     <div><label>Telefone</label><input id="clTel" value="${esc(c?c.telefone:'')}"></div>
     <div><label>Data de nascimento</label><input type="date" id="clNasc" value="${c&&c.data_nascimento?c.data_nascimento:''}"></div>
     <div><label>Situação</label><select id="clAtivo"><option value="1">Ativo</option><option value="0" ${c&&!c.ativo?'selected':''}>Inativo</option></select></div>
+    <div><label>Classificação</label><select id="clCls"><option value="">Sem classificação</option>${Object.entries(CLASSES).map(([k,x])=>`<option value="${k}" ${c&&c.classificacao===k?'selected':''}>${x.ic} ${x.l}</option>`).join('')}</select></div>
+    <div><label>Data do cadastro</label><input type="date" id="clCad" value="${c ? (c.data_cadastro||'') : hoje()}" ${isAdmin()?'':'disabled'}></div>
     <div class="full"><label>Observação</label><textarea id="clObs">${esc(c?c.observacao:'')}</textarea></div></div>`,
     `<button class="btn sec" onclick="fecharModal()">Cancelar</button><button class="btn" id="clSalvar" onclick="salvarCliente(${id||'null'})">Salvar</button>`);
 }
 async function salvarCliente(id){
-  const o = { nome:$('clNome').value.trim().toUpperCase(), empresa_id:Number($('clEmp').value), vendedora_id:Number($('clVend').value)||null, celular:$('clCel').value.trim()||null, telefone:$('clTel').value.trim()||null, data_nascimento:$('clNasc').value||null, ativo:$('clAtivo').value==='1', observacao:$('clObs').value.trim()||null };
+  const o = { nome:$('clNome').value.trim().toUpperCase(), empresa_id:Number($('clEmp').value), vendedora_id:Number($('clVend').value)||null, celular:$('clCel').value.trim()||null, telefone:$('clTel').value.trim()||null, data_nascimento:$('clNasc').value||null, ativo:$('clAtivo').value==='1', observacao:$('clObs').value.trim()||null, classificacao:$('clCls').value||null, data_cadastro:$('clCad').value||null };
   if(!o.nome) return toast('Informe o nome.', 'err');
-  if(!isAdmin()){ delete o.empresa_id; delete o.vendedora_id; if(!id) o.empresa_id = curEmp(); }
+  if(!isAdmin()){ delete o.empresa_id; delete o.vendedora_id; if(!id) o.empresa_id = curEmp(); if(id) delete o.data_cadastro; else o.data_cadastro = hoje(); }
   $('clSalvar').disabled = true;
   try{
     if(id){ Object.assign(M.cli[id], await api.upd('clientes', id, o)); }
@@ -1236,45 +1405,64 @@ function historicoCli(id){
 /* ============================ VENDEDORAS + METAS (ADMIN) ============================ */
 function pgVend(){
   const comp = mesAtual(), l = vendsVisiveis();
-  const usu = vid => db.usuarios.find(u => u.vendedora_id === vid);
-  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Cada vendedora fica vinculada a uma empresa e a um login (🔗) e só vê a própria empresa e os próprios números. A meta mensal padrão vale para os meses sem meta específica.</div><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
+  const usus = vid => db.usuarios.filter(u => u.perfil !== 'admin' && vincDe(u.id).includes(vid));
+  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Cada vendedora fica vinculada a uma empresa e a um ou mais logins (🔗). Um login pode ter várias vendedoras da mesma empresa (ex.: login do caixa) e vê só essa empresa e os números delas. A meta mensal padrão vale para os meses sem meta específica.</div><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
   <div class="tbl-wrap"><table><thead><tr><th>Vendedora</th><th>Empresa</th><th>Contato</th><th class="num">Meta padrão/mês</th><th class="num">Meta ${comp.slice(5)}/${comp.slice(0,4)}</th><th>Acesso</th><th>Situação</th><th></th></tr></thead><tbody>
-  ${l.map(v => { const u = usu(v.id); return `<tr><td><b>${esc(v.nome)}</b></td><td>${empTag(v.empresa_id)}</td><td class="small">${esc(v.telefone)}${v.email?'<br>'+esc(v.email):''}</td><td class="num">${fmtN(v.meta_mensal_padrao)}</td><td class="num"><b>${fmtN(metaDe(v.id, comp))}</b></td>
-    <td>${u?`<span class="tag ${u.ativo?'ok':''}">${esc(u.email)}${u.ativo?'':' (inativo)'}</span> <button class="btn sec sm" title="Trocar empresa ou usuário" onclick="abrirVinculo(${v.id})">🔗</button>`:`<button class="btn sm" onclick="abrirVinculo(${v.id})">🔗 Vincular empresa e usuário</button>`}</td><td>${v.ativa?'<span class="tag ok">Ativa</span>':'<span class="tag">Inativa</span>'}</td>
+  ${l.map(v => { const us = usus(v.id); return `<tr><td><b>${esc(v.nome)}</b></td><td>${empTag(v.empresa_id)}</td><td class="small">${esc(v.telefone)}${v.email?'<br>'+esc(v.email):''}</td><td class="num">${fmtN(v.meta_mensal_padrao)}</td><td class="num"><b>${fmtN(metaDe(v.id, comp))}</b></td>
+    <td>${us.length?us.map(u=>`<span class="tag ${u.ativo?'ok':''}">${esc(u.email)}${u.ativo?'':' (inativo)'}</span>`).join(' ')+` <button class="btn sec sm" title="Empresa e logins" onclick="abrirVinculo(${v.id})">🔗</button>`:`<button class="btn sm" onclick="abrirVinculo(${v.id})">🔗 Vincular empresa e usuário</button>`}</td><td>${v.ativa?'<span class="tag ok">Ativa</span>':'<span class="tag">Inativa</span>'}</td>
     <td class="act"><button class="btn sec sm" onclick="abrirMetas(${v.id})">🎯 Metas</button> <button class="btn sec sm" onclick="abrirVend(${v.id})">✎</button></td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
   </tbody></table></div>`;
 }
-function usuariosLivres(vid){ return db.usuarios.filter(u => u.perfil !== 'admin' && (!u.vendedora_id || u.vendedora_id === vid)).sort((a,b) => (a.email||'').localeCompare(b.email||'')); }
+async function patchUsuario(id, o){
+  const r = await sbFetch(`/rest/v1/usuarios?id=eq.${id}`, { method:'PATCH', body:o, headers:{ Prefer:'return=representation' } });
+  const k = db.usuarios.findIndex(x => x.id === id); if(r && r[0]){ if(k >= 0) db.usuarios[k] = r[0]; else db.usuarios.push(r[0]); }
+  return r && r[0];
+}
+async function setVinculos(uid, vids){
+  const atuais = db.uv.filter(x => x.usuario_id === uid).map(x => Number(x.vendedora_id));
+  const rem = atuais.filter(v => !vids.includes(v)), add = vids.filter(v => !atuais.includes(v));
+  try{
+    if(rem.length) await sbFetch(`/rest/v1/usuario_vendedoras?usuario_id=eq.${uid}&vendedora_id=in.(${rem.join(',')})`, { method:'DELETE' });
+    if(add.length) await sbFetch('/rest/v1/usuario_vendedoras', { method:'POST', body: add.map(v => ({ usuario_id:uid, vendedora_id:v })), headers:{ Prefer:'resolution=ignore-duplicates,return=minimal' } });
+  }catch(e){ if(/usuario_vendedoras/i.test(e.message)) throw new Error('Tabela de vínculos não encontrada. Execute o 03_login_varias_vendedoras.sql no Supabase.'); throw e; }
+  db.uv = db.uv.filter(x => !(x.usuario_id === uid && rem.includes(Number(x.vendedora_id)))).concat(add.map(v => ({ usuario_id:uid, vendedora_id:v })));
+}
+async function aplicarVinculos(u, nova, nomePadrao){
+  await setVinculos(u.id, nova);
+  const o = { vendedora_id: nova[0] || null };
+  if(nova.length){ o.perfil = 'vendedora'; o.ativo = true; if(nova.length === 1 && nomePadrao && (!u.nome || u.nome === (u.email||'').split('@')[0])) o.nome = nomePadrao; }
+  else o.ativo = false;
+  await patchUsuario(u.id, o);
+}
 function abrirVinculo(vid){
-  const v = M.vend[vid], atual = db.usuarios.find(u => u.vendedora_id === vid), livres = usuariosLivres(vid);
+  const v = M.vend[vid], logins = db.usuarios.filter(u => u.perfil !== 'admin').sort((a,b) => (a.email||'').localeCompare(b.email||''));
   const temHist = db.followups.some(f => f.vendedora_id === vid) || db.ligacoes.some(l => l.vendedora_id === vid);
-  abrirModal('🔗 Empresa e usuário · '+esc(v.nome), `
-    <p style="margin-top:0">A vendedora enxerga <b>somente a empresa vinculada</b> (clientes e aniversariantes dela) e <b>somente os próprios números</b> (follow-ups, ligações, metas e painel). Apenas o administrador vê todas as vendedoras e todas as empresas.</p>
-    <div class="form">
-      <div class="full"><label>Empresa vinculada *</label><select id="vcEmp">${db.empresas.filter(e => e.ativo || e.id === v.empresa_id).map(e => `<option value="${e.id}" ${e.id===v.empresa_id?'selected':''}>${esc(e.nome)}</option>`).join('')}</select></div>
-      <div class="full"><label>Usuário (login)</label><select id="vcUsu">
-        <option value="">— Nenhum (sem acesso) —</option>
-        ${livres.map(u => `<option value="${u.id}" ${atual&&atual.id===u.id?'selected':''}>${esc(u.email)}${u.nome&&u.nome!==u.email.split('@')[0]?' · '+esc(u.nome):''}</option>`).join('')}
-      </select></div>
-    </div>
-    ${temHist ? '<p class="small muted">Se trocar a empresa, os follow-ups e ligações já registrados continuam na empresa anterior (histórico).</p>' : ''}
-    ${livres.filter(u=>!u.vendedora_id).length ? '' : '<p class="small muted">Nenhum login livre. Crie o login no Supabase (Authentication → Users → Add user) e clique em ↻ para atualizar; ele aparece nesta lista.</p>'}`,
+  abrirModal('🔗 Empresa e logins · '+esc(v.nome), `
+    <p style="margin-top:0">Quem entra com um login enxerga <b>somente a empresa</b> das vendedoras vinculadas e <b>somente os números delas</b>. Um mesmo login pode ter <b>várias vendedoras</b> (ex.: login do caixa da loja), desde que sejam da mesma empresa. Apenas o administrador vê tudo.</p>
+    <div class="form"><div class="full"><label>Empresa vinculada *</label><select id="vcEmp">${db.empresas.filter(e => e.ativo || e.id === v.empresa_id).map(e => `<option value="${e.id}" ${e.id===v.empresa_id?'selected':''}>${esc(e.nome)}</option>`).join('')}</select></div></div>
+    <label style="display:block;font-size:12px;font-weight:600;color:var(--mut);margin:14px 0 6px">Logins com acesso a esta vendedora</label>
+    ${logins.map(u => { const outras = vincDe(u.id).filter(x => x !== vid), eo = outras.length ? (M.vend[outras[0]]||{}).empresa_id : null;
+      return `<label class="ck-row"><input type="checkbox" class="vcCk" value="${u.id}" ${vincDe(u.id).includes(vid)?'checked':''}><span><b>${esc(u.email)}</b>${u.ativo?'':' <span class="tag">inativo</span>'}<br><span class="small muted">${outras.length ? 'Também acessa: '+outras.map(x => esc(vendNome(x))).join(', ')+' · '+esc(empNome(eo)) : 'Sem outras vendedoras'}</span></span></label>`; }).join('') || '<div class="muted small">Nenhum login cadastrado. Crie o login no Supabase (Authentication → Users → Add user) e clique em ↻.</div>'}
+    ${temHist ? '<p class="small muted">Se trocar a empresa, os follow-ups e ligações já registrados continuam na empresa anterior (histórico).</p>' : ''}`,
     `<button class="btn sec" onclick="fecharModal()">Cancelar</button><button class="btn sec" onclick="fecharModal(true);abrirUsuario(null,${vid})">🔑 Criar novo login</button><button class="btn" id="vcOk" onclick="salvarVinculo(${vid})">Salvar</button>`);
 }
 async function salvarVinculo(vid){
-  const v = M.vend[vid], emp = Number($('vcEmp').value), novo = $('vcUsu').value, atual = db.usuarios.find(u => u.vendedora_id === vid);
-  const mudouEmp = emp !== v.empresa_id, mudouUsu = (atual ? atual.id : '') !== novo;
-  if(!mudouEmp && !mudouUsu){ fecharModal(true); return; }
+  const v = M.vend[vid], emp = Number($('vcEmp').value), marc = [...document.querySelectorAll('.vcCk:checked')].map(i => i.value), mud = [];
+  for(const u of db.usuarios.filter(x => x.perfil !== 'admin')){
+    const at = vincDe(u.id), tem = at.includes(vid), quer = marc.includes(u.id);
+    const nova = quer ? (tem ? at : [...at, vid]) : at.filter(x => x !== vid);
+    if(quer){ const o = nova.find(x => x !== vid && (M.vend[x]||{}).empresa_id !== emp);
+      if(o) return toast(`O login ${u.email} já acessa ${vendNome(o)} (${empNome(M.vend[o].empresa_id)}). Um login só pode acessar uma empresa.`, 'err'); }
+    if(tem !== quer) mud.push({ u, nova, quer });
+  }
+  const mudouEmp = emp !== v.empresa_id;
+  if(!mudouEmp && !mud.length){ fecharModal(true); return; }
   $('vcOk').disabled = true;
   try{
     if(mudouEmp) Object.assign(v, await api.upd('vendedoras', vid, { empresa_id:emp }));
-    if(mudouUsu){
-      const troca = async (id, o) => { const r = await sbFetch(`/rest/v1/usuarios?id=eq.${id}`, { method:'PATCH', body:o, headers:{ Prefer:'return=representation' } }); const k = db.usuarios.findIndex(x => x.id === id); if(r && r[0] && k >= 0) db.usuarios[k] = r[0]; };
-      if(atual) await troca(atual.id, { vendedora_id:null, ativo:false });
-      if(novo){ const u = db.usuarios.find(x => x.id === novo); await troca(novo, { vendedora_id:vid, perfil:'vendedora', ativo:true, nome: (u.nome && u.nome !== (u.email||'').split('@')[0]) ? u.nome : v.nome }); }
-    }
+    for(const m of mud) await aplicarVinculos(m.u, m.nova, v.nome);
     fecharModal(true);
-    toast([mudouEmp ? 'Empresa vinculada: '+empNome(emp) : '', mudouUsu ? (novo ? 'usuário vinculado e acesso ativado' : 'usuário desvinculado') : ''].filter(Boolean).join(' · ') + '.', 'ok');
+    toast([mudouEmp ? 'Empresa vinculada: '+empNome(emp) : '', mud.length ? `${mud.filter(m=>m.quer).length} login(s) vinculado(s), ${mud.filter(m=>!m.quer).length} desvinculado(s)` : ''].filter(Boolean).join(' · ') + '.', 'ok');
     pgVend();
   }catch(e){ toast(e.message, 'err'); $('vcOk').disabled = false; }
 }
@@ -1305,7 +1493,7 @@ function abrirMetas(vid, ano){
     <div class="filters"><div class="f"><label>Ano</label><select onchange="abrirMetas(${vid}, Number(this.value))">${[ano-1,ano,ano+1].map(a=>`<option ${a===ano?'selected':''}>${a}</option>`).join('')}</select></div>
     <div class="f small muted" style="padding-bottom:9px">Em branco = usa a meta padrão (${fmtN(v.meta_mensal_padrao)}).</div></div>
     <div class="form" style="grid-template-columns:repeat(3,minmax(0,1fr))">${MESES.map((m,i) => { const comp = ano+'-'+pad(i+1), r = db.metas.find(x=>x.vendedora_id===vid && x.competencia===comp);
-      return `<div><label>${m}</label><input type="number" min="0" data-comp="${comp}" class="mtIn" value="${r?r.meta_ligacoes:''}" placeholder="${v.meta_mensal_padrao}"></div>`; }).join('')}</div>`,
+      return `<div><label>${m}</label><input type="number" min="0" data-comp="${comp}" class="mtIn" value="${r?r.meta_ligacoes:''}" placeholder="${v.meta_mensal_padrao}" oninput="this.nextElementSibling.textContent=metaDiaTxt(this.value===''?${v.meta_mensal_padrao||0}:Number(this.value),'${comp}')"><div class="small muted" style="margin-top:3px">${metaDiaTxt(r?r.meta_ligacoes:(v.meta_mensal_padrao||0), comp)}</div></div>`; }).join('')}</div>`,
     `<button class="btn sec" onclick="fecharModal()">Cancelar</button><button class="btn" id="mtSalvar" onclick="salvarMetas(${vid})">Salvar metas</button>`);
 }
 async function salvarMetas(vid){
@@ -1351,31 +1539,34 @@ async function salvarEmp(id){
 
 /* ============================ USUÁRIOS / ACESSOS (ADMIN) ============================ */
 function pgUsu(){
-  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Cada vendedora entra com seu e-mail e senha e vê apenas os próprios follow-ups e ligações, e os clientes da sua empresa.</div><button class="btn" onclick="abrirUsuario()">+ Novo acesso</button></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Vendedora vinculada</th><th>Situação</th><th></th></tr></thead><tbody>
+  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Cada login vê apenas a empresa e os números das vendedoras vinculadas a ele. Um login pode ter várias vendedoras da mesma empresa (ex.: caixa da loja).</div><button class="btn" onclick="abrirUsuario()">+ Novo acesso</button></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Vendedoras vinculadas</th><th>Situação</th><th></th></tr></thead><tbody>
   ${db.usuarios.map(u => `<tr><td><b>${esc(u.nome)}</b></td><td>${esc(u.email)}</td><td>${u.perfil==='admin'?'<span class="tag or">Administrador</span>':'<span class="tag info">Vendedora</span>'}</td>
-    <td>${u.vendedora_id?esc(vendNome(u.vendedora_id))+' '+empTag((M.vend[u.vendedora_id]||{}).empresa_id):(u.perfil==='admin'?'—':'<span class="tag bad">Não vinculada</span>')}</td>
+    <td>${u.perfil==='admin'?'—':(()=>{ const vs = vincDe(u.id); return vs.length ? vs.map(x=>esc(vendNome(x))).join(', ')+' '+empTag((M.vend[vs[0]]||{}).empresa_id) : '<span class="tag bad">Não vinculada</span>'; })()}</td>
     <td>${u.ativo?'<span class="tag ok">Ativo</span>':'<span class="tag">Inativo</span>'}</td><td class="act"><button class="btn sec sm" onclick="abrirUsuario('${u.id}')">✎</button></td></tr>`).join('')}
   </tbody></table></div>`;
 }
 function abrirUsuario(uid, vendId){
   const u = uid ? db.usuarios.find(x => x.id === uid) : null, v = vendId ? M.vend[vendId] : null;
-  const vOpts = '<option value="">—</option>' + db.vendedoras.filter(x=>x.ativa || (u && u.vendedora_id===x.id)).map(x => `<option value="${x.id}" ${(u?u.vendedora_id:vendId)===x.id?'selected':''}>${esc(x.nome)} · ${esc(empNome(x.empresa_id))}</option>`).join('');
+  const sel = u ? vincDe(u.id) : (vendId ? [vendId] : []);
+  const lista = db.empresas.map(e => { const vs = db.vendedoras.filter(x => x.empresa_id === e.id && (x.ativa || sel.includes(x.id))).sort((a,b)=>a.nome.localeCompare(b.nome));
+    return vs.length ? `<div style="margin:8px 0 4px">${empTag(e.id)}</div>` + vs.map(x => `<label class="ck-row"><input type="checkbox" class="usVk" value="${x.id}" ${sel.includes(x.id)?'checked':''}><span>${esc(x.nome)}${x.ativa?'':' <span class="tag">inativa</span>'}</span></label>`).join('') : ''; }).join('') || '<div class="muted small">Nenhuma vendedora cadastrada.</div>';
   abrirModal(u ? 'Editar acesso' : 'Novo acesso', `<div class="form">
     <div class="full"><label>Nome *</label><input id="usNome" value="${esc(u?u.nome:(v?v.nome:''))}"></div>
     <div class="full"><label>E-mail (login) *</label><input type="email" id="usEmail" value="${esc(u?u.email:(v&&v.email?v.email:''))}" ${u?'disabled':''}></div>
     ${u?'':'<div class="full"><label>Senha inicial * (mín. 8 caracteres)</label><input type="text" id="usSenha" autocomplete="new-password"></div>'}
     <div><label>Perfil</label><select id="usPerfil" onchange="$('usVendBox').classList.toggle('hidden',this.value==='admin')"><option value="vendedora">Vendedora</option><option value="admin" ${u&&u.perfil==='admin'?'selected':''}>Administrador</option></select></div>
     <div><label>Situação</label><select id="usAtivo"><option value="1">Ativo</option><option value="0" ${u&&!u.ativo?'selected':''}>Inativo</option></select></div>
-    <div class="full ${u&&u.perfil==='admin'?'hidden':''}" id="usVendBox"><label>Vendedora vinculada *</label><select id="usVend">${vOpts}</select></div></div>
+    <div class="full ${u&&u.perfil==='admin'?'hidden':''}" id="usVendBox"><label>Vendedoras vinculadas * <span style="font-weight:400">(uma ou mais, da mesma empresa)</span></label>${lista}</div></div>
     ${u?'':'<p class="small muted">Se o cadastro de novos logins estiver desativado no Supabase, crie o login em Authentication → Users → Add user; ele aparece nesta lista como inativo para você vincular e ativar.</p>'}`,
     `<button class="btn sec" onclick="fecharModal()">Cancelar</button><button class="btn" id="usSalvar" onclick="salvarUsuario(${u?`'${u.id}'`:'null'})">Salvar</button>`);
 }
 async function salvarUsuario(uid){
-  const perfil = $('usPerfil').value, vend = perfil==='admin' ? null : (Number($('usVend').value)||null);
-  const o = { nome:$('usNome').value.trim(), perfil, vendedora_id:vend, ativo:$('usAtivo').value==='1' };
+  const perfil = $('usPerfil').value, vids = perfil==='admin' ? [] : [...document.querySelectorAll('.usVk:checked')].map(i => Number(i.value));
+  const o = { nome:$('usNome').value.trim(), perfil, vendedora_id:vids[0]||null, ativo:$('usAtivo').value==='1' };
   if(!o.nome) return toast('Informe o nome.', 'err');
-  if(perfil==='vendedora' && !vend) return toast('Vincule o acesso a uma vendedora.', 'err');
+  if(perfil==='vendedora' && !vids.length) return toast('Vincule o acesso a pelo menos uma vendedora.', 'err');
+  if(new Set(vids.map(x => (M.vend[x]||{}).empresa_id)).size > 1) return toast('Um login só pode ter vendedoras da mesma empresa.', 'err');
   if(uid === db.me.id && (perfil!=='admin' || !o.ativo)) return toast('Você não pode remover seu próprio acesso de administrador.', 'err');
   $('usSalvar').disabled = true;
   try{
@@ -1390,6 +1581,7 @@ async function salvarUsuario(uid){
     const rows = await sbFetch(`/rest/v1/usuarios?id=eq.${uid}`, { method:'PATCH', body:o, headers:{ Prefer:'return=representation' } });
     if(!rows || !rows.length) throw new Error('Usuário criado no Auth, mas o perfil não foi encontrado. Verifique se o 01_schema.sql (trigger) foi executado.');
     const k = db.usuarios.findIndex(x => x.id === uid); if(k>=0) db.usuarios[k] = rows[0]; else db.usuarios.push(rows[0]);
+    await setVinculos(uid, vids);
     fecharModal(true); toast('Acesso salvo.', 'ok'); ir(st.page);
   }catch(e){ toast(e.message, 'err'); $('usSalvar').disabled = false; }
 }
@@ -1440,20 +1632,20 @@ async function gerarPDF({ titulo, subtitulo, resumo, colunas, linhas, arquivo, p
   finally{ loading(false); }
 }
 function pdfAniv(){
-  const l = st.pdfAniv || [], h = hoje(), aba = { hoje:'Hoje - '+fmtD(h), '7':'Próximos 7 dias', mes: MESES[new Date().getMonth()]+'/'+h.slice(0,4) }[st.aniv.tab];
+  const l = st.pdfAniv || [], h = hoje(), aba = { hoje:'Hoje - '+fmtD(h), '7':'Próximos 7 dias', mes: MESES[Number(st.aniv.mes)-1]+'/'+st.aniv.ano }[st.aniv.tab] + (st.aniv.emp ? '  -  Empresa: '+empNome(Number(st.aniv.emp)) : '') + clsDesc(st.aniv.cls);
   if(!l.length) return toast('Nenhum aniversariante neste período.', 'err');
   const feitos = l.filter(x => x.d === h && ligouHoje(x.c.id)).length;
   gerarPDF({ titulo:'Aniversariantes', subtitulo:aba, arquivo:`aniversariantes_${st.aniv.tab}_${h}.pdf`,
     resumo: `${l.length} aniversariante(s)` + (st.aniv.tab==='hoje' ? `  -  ${feitos} já ligada(s), ${l.length-feitos} pendente(s)` : ''),
-    colunas:['Data','Dia','Cliente','Empresa','Idade','Celular','Telefone','Ligação hoje'],
-    linhas: l.map(({d,c}) => { const lg = d === h ? ligouHoje(c.id) : null; return [fmtDM(d), nomeDia(d), c.nome, empNome(c.empresa_id), idadeEm(c,d)+' anos', c.celular||'', c.telefone||'', d !== h ? '' : lg ? `Sim, ${fmtDH(lg.inicio).slice(11)} - ${vendNome(lg.vendedora_id)}` : 'Pendente']; }),
-    estilos:{ 0:{cellWidth:13}, 1:{cellWidth:16}, 4:{cellWidth:15} } });
+    colunas:['Data','Dia','Cliente','Empresa','Classif.','Idade','Celular','Telefone','Ligação hoje'],
+    linhas: l.map(({d,c}) => { const lg = d === h ? ligouHoje(c.id) : null; return [fmtDM(d), nomeDia(d), c.nome, empNome(c.empresa_id), clsNome(c), idadeEm(c,d)+' anos', c.celular||'', c.telefone||'', d !== h ? '' : lg ? `Sim, ${fmtDH(lg.inicio).slice(11)} - ${vendNome(lg.vendedora_id)}` : 'Pendente']; }),
+    estilos:{ 0:{cellWidth:13}, 1:{cellWidth:16}, 4:{cellWidth:14}, 5:{cellWidth:15} } });
 }
 function pdfPlan(){
   const P = st.pdfPlan || { itens:[] }, l = P.itens, h = hoje();
   if(!l.length) return toast('Nenhum follow-up neste filtro.', 'err');
   const stt = f => f.status==='concluido' ? 'Concluído' : f.status==='cancelado' ? 'Cancelado' : f.data_prevista < h ? 'Atrasado' : 'Pendente';
-  gerarPDF({ titulo:'Planejamento (Follow-up)', subtitulo: P.desc + (st.plan.vend ? '  -  Vendedora: '+vendNome(Number(st.plan.vend)) : '') + (st.plan.q ? '  -  Busca: '+st.plan.q : ''),
+  gerarPDF({ titulo:'Planejamento (Follow-up)', subtitulo: P.desc + (st.plan.vend ? '  -  Vendedora: '+vendNome(Number(st.plan.vend)) : '') + clsDesc(st.plan.cls) + (st.plan.q ? '  -  Busca: '+st.plan.q : ''),
     arquivo:`planejamento_${h}.pdf`, paisagem:true,
     resumo: `${l.length} follow-up(s)  -  ${l.filter(f=>stt(f)==='Atrasado').length} atrasado(s), ${l.filter(f=>stt(f)==='Pendente').length} pendente(s), ${l.filter(f=>f.status==='concluido').length} concluído(s)`,
     colunas:['Data','Hora','Cliente','Telefones','Motivo','Descrição','Vendedora','Empresa','Situação'],
@@ -1464,7 +1656,7 @@ function pdfLig(){
   const l = ligFiltradas(), p = st.lig; if(!l.length) return toast('Nenhuma ligação no período.', 'err');
   const dur = l.reduce((s,x)=>s+(x.duracao_seg||0),0), ef = l.filter(x=>efetivo(x.resultado)).length;
   gerarPDF({ titulo:'Ligações Realizadas', arquivo:`ligacoes_${p.de||'inicio'}_${p.ate||hoje()}.pdf`, paisagem:true,
-    subtitulo: 'Período: ' + (p.de?fmtD(p.de):'início') + ' a ' + (p.ate?fmtD(p.ate):'hoje') + (p.vend ? '  -  Vendedora: '+vendNome(Number(p.vend)) : '') + (p.res ? '  -  Resultado: '+(p.res==='_efet'?'Somente atendidas':p.res) : '') + (p.q ? '  -  Busca: '+p.q : ''),
+    subtitulo: 'Período: ' + (p.de?fmtD(p.de):'início') + ' a ' + (p.ate?fmtD(p.ate):'hoje') + (p.vend ? '  -  Vendedora: '+vendNome(Number(p.vend)) : '') + (p.res ? '  -  Resultado: '+(p.res==='_efet'?'Somente atendidas':p.res) : '') + (p.q ? '  -  Busca: '+p.q : '') + clsDesc(p.cls),
     resumo: `${l.length} ligação(ões)  -  ${ef} atendida(s) (${pct(ef,l.length)}%)  -  Tempo total ${fmtDur(dur)}  -  Média ${fmtDur(l.length?dur/l.length:0)}`,
     colunas:['Data/hora','Cliente','Empresa','Vendedora','Motivo','Resultado','Duração','Descrição'],
     linhas: l.map(x => [fmtDH(x.inicio), cliNome(x.cliente_id), empNome(x.empresa_id), vendNome(x.vendedora_id), x.motivo||'', x.resultado, fmtDur(x.duracao_seg), x.descricao||'']),
@@ -1473,11 +1665,11 @@ function pdfLig(){
 function pdfCli(){
   const l = st.pdfCli || [], p = st.cli; if(!l.length) return toast('Nenhum cliente neste filtro.', 'err');
   gerarPDF({ titulo:'Clientes', arquivo:`clientes_${hoje()}.pdf`, paisagem:true,
-    subtitulo: [p.mes ? 'Aniversário em '+MESES[Number(p.mes)-1] : '', p.q ? 'Busca: '+p.q : ''].filter(Boolean).join('  -  ') || 'Todos os clientes',
+    subtitulo: ([p.mes ? 'Aniversário em '+MESES[Number(p.mes)-1] : '', p.q ? 'Busca: '+p.q : ''].filter(Boolean).join('  -  ') || 'Todos os clientes') + clsDesc(p.cls),
     resumo: `${fmtN(l.length)} cliente(s)  -  ${fmtN(l.filter(c=>c.data_nascimento).length)} com data de nascimento`,
-    colunas:['Nome','Empresa','Celular','Telefone','Nascimento','Carteira','Última ligação'],
-    linhas: l.map(c => { const u = M.ultLig[c.id]; return [c.nome + (c.ativo?'':' (inativo)'), empNome(c.empresa_id), c.celular||'', c.telefone||'', c.data_nascimento?fmtD(c.data_nascimento):'', c.vendedora_id?vendNome(c.vendedora_id):'', u ? fmtDH(u.inicio)+' - '+u.resultado : '']; }),
-    estilos:{ 0:{cellWidth:72}, 1:{cellWidth:22}, 2:{cellWidth:28}, 3:{cellWidth:28}, 4:{cellWidth:22} } });
+    colunas:['Nome','Empresa','Classif.','Celular','Telefone','Nascimento','Cadastro','Carteira','Última ligação'],
+    linhas: l.map(c => { const u = M.ultLig[c.id]; return [c.nome + (c.ativo?'':' (inativo)'), empNome(c.empresa_id), clsNome(c), c.celular||'', c.telefone||'', c.data_nascimento?fmtD(c.data_nascimento):'', c.data_cadastro?fmtD(c.data_cadastro):'', c.vendedora_id?vendNome(c.vendedora_id):'', u ? fmtDH(u.inicio)+' - '+u.resultado : '']; }),
+    estilos:{ 0:{cellWidth:62}, 1:{cellWidth:20}, 2:{cellWidth:15}, 3:{cellWidth:26}, 4:{cellWidth:26}, 5:{cellWidth:20}, 6:{cellWidth:20} } });
 }
 
 /* ============================ INÍCIO ============================ */
