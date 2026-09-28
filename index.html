@@ -772,6 +772,7 @@ function pgPainel(){
     ${verVendFiltro()?`<div class="f"><label>Vendedora</label><select onchange="st.painel.vend=this.value;pgPainel()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
     ${clsFiltro(p.cls, "st.painel.cls=this.value;pgPainel()")}
     <div class="f small muted" style="padding-bottom:9px">Dias úteis (seg a sáb): ${duAte} de ${duTot}</div>
+    <button class="btn sec" onclick="pdfPainel()">📄 Gerar PDF</button>
   </div>
   <div class="kpis">
     <div class="kpi"><div class="l">Ligações no mês</div><div class="v">${fmtN(T.real)}</div><div class="s">Meta: ${fmtN(T.meta)}</div></div>
@@ -798,6 +799,8 @@ function pgPainel(){
     <td class="num">${fmtN(x.esperado)}</td><td>${sit}</td><td class="num">${fmtN(x.efet)}</td><td class="num">${x.fuAtr?`<span class="tag bad">${x.fuAtr}</span>`:'0'}</td></tr>`; }).join('') || '<tr><td colspan="12" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
   </tbody></table></div></div>`;
 
+  st.pdfPainel = { comp, T, pm, novosMes, duAte, duTot, mesCorr, domingo, anivN: anivDoDia(h).length, anivLig: anivDoDia(h).filter(c=>ligouHoje(c.id)).length,
+    linhas: linhas.slice().sort((a,b)=>pct(b.real,b.meta)-pct(a.real,a.meta)||b.real-a.real) };
   if(typeof Chart === 'undefined') return;
   Chart.defaults.font.family = "'Segoe UI',system-ui,Arial,sans-serif";
   const cor = x => CORES[db.vendedoras.indexOf(x.v) % CORES.length];
@@ -1435,7 +1438,7 @@ function historicoCli(id){
 function pgVend(){
   const comp = mesAtual(), l = vendsVisiveis();
   const usus = vid => db.usuarios.filter(u => u.perfil !== 'admin' && vincDe(u.id).includes(vid));
-  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Cada vendedora fica vinculada a uma empresa e a um ou mais logins (🔗). Um login pode ter várias vendedoras da mesma empresa (ex.: login do caixa) e vê só essa empresa e os números delas. A meta mensal padrão vale para os meses sem meta específica.</div><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
+  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Cada vendedora fica vinculada a uma empresa e a um ou mais logins (🔗). Um login pode ter várias vendedoras da mesma empresa (ex.: login do caixa) e vê só essa empresa e os números delas. A meta mensal padrão vale para os meses sem meta específica.</div><button class="btn sec" onclick="pdfVend()">📄 Gerar PDF</button><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
   <div class="tbl-wrap"><table><thead><tr><th>Vendedora</th><th>Empresa</th><th>Contato</th><th class="num">Meta padrão/mês</th><th class="num">Meta ${comp.slice(5)}/${comp.slice(0,4)}</th><th>Acesso</th><th>Situação</th><th></th></tr></thead><tbody>
   ${l.map(v => { const us = usus(v.id); return `<tr><td><b>${esc(v.nome)}</b></td><td>${empTag(v.empresa_id)}</td><td class="small">${esc(v.telefone)}${v.email?'<br>'+esc(v.email):''}</td><td class="num">${fmtN(v.meta_mensal_padrao)}</td><td class="num"><b>${fmtN(metaDe(v.id, comp))}</b></td>
     <td>${us.length?us.map(u=>`<span class="tag ${u.ativo?'ok':''}">${esc(u.email)}${u.ativo?'':' (inativo)'}</span>`).join(' ')+` <button class="btn sec sm" title="Empresa e logins" onclick="abrirVinculo(${v.id})">🔗</button>`:`<button class="btn sm" onclick="abrirVinculo(${v.id})">🔗 Vincular empresa e usuário</button>`}</td><td>${v.ativa?'<span class="tag ok">Ativa</span>':'<span class="tag">Inativa</span>'}</td>
@@ -1652,7 +1655,7 @@ async function carregarPDF(){
 }
 function logoDataURL(){ const m = getComputedStyle(document.documentElement).getPropertyValue('--logo').match(/url\(["']?(data:[^"')]+)["']?\)/); return m ? m[1] : null; }
 const pdfTxt = v => String(v ?? '').replace(/[^\u0000-ÿ]/g, '').replace(/\s+/g, ' ').trim();
-async function gerarPDF({ titulo, subtitulo, resumo, colunas, linhas, arquivo, paisagem, estilos }){
+async function gerarPDF({ titulo, subtitulo, resumo, colunas, linhas, arquivo, paisagem, estilos, kpis, graficos }){
   loading(true, 'Gerando PDF…');
   try{
     await carregarPDF();
@@ -1669,6 +1672,16 @@ async function gerarPDF({ titulo, subtitulo, resumo, colunas, linhas, arquivo, p
     };
     cab();
     let y = 33;
+    if(kpis && kpis.length){
+      const porLinha = paisagem ? 6 : 4, gap = 3, bw = (W - 24 - gap*(porLinha-1)) / porLinha, bh = 16;
+      kpis.forEach((k, i) => { const col = i % porLinha, x = 12 + col*(bw+gap); if(i && col === 0) y += bh + gap;
+        doc.setFillColor(250,250,251); doc.setDrawColor(229,231,235); doc.setLineWidth(0.2); doc.rect(x, y, bw, bh, 'FD');
+        doc.setFillColor(242,112,26); doc.rect(x, y, 1.2, bh, 'F');
+        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(107,114,128); doc.text(pdfTxt(k[0]), x+3.5, y+4.5);
+        doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(31,35,40); doc.text(pdfTxt(k[1]), x+3.5, y+10.5);
+        if(k[2]){ doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(107,114,128); doc.text(pdfTxt(k[2]), x+3.5, y+14.2, { maxWidth: bw-5 }); } });
+      y += bh + 6;
+    }
     if(resumo){ doc.setFontSize(9.5); doc.setTextColor(43,47,54); doc.setFont('helvetica','bold'); doc.text(pdfTxt(resumo), 12, y); y += 4; }
     doc.autoTable({
       head: [colunas.map(pdfTxt)], body: linhas.map(r => r.map(pdfTxt)), startY: y, margin: { top: 33, left: 12, right: 12, bottom: 14 },
@@ -1677,6 +1690,20 @@ async function gerarPDF({ titulo, subtitulo, resumo, colunas, linhas, arquivo, p
       alternateRowStyles: { fillColor:[253,245,238] }, columnStyles: estilos || {},
       didDrawPage: d => { if(d.pageNumber > 1) cab(); }
     });
+    if(graficos && graficos.length){
+      let gy = doc.lastAutoTable.finalY + 8, col = 0, alturaLinha = 0;
+      const gap = 6, gw = (W - 24 - gap) / 2;
+      for(const g of graficos){
+        const cv = $(g.canvas); if(!cv || !cv.width) continue;
+        const gh = gw * cv.height / cv.width;
+        if(col === 0 && gy + gh + 6 > H - 14){ doc.addPage(); cab(); gy = 34; }
+        const x = 12 + col * (gw + gap);
+        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(43,47,54); doc.text(pdfTxt(g.titulo), x, gy);
+        try{ doc.addImage(cv.toDataURL('image/png'), 'PNG', x, gy + 2, gw, gh); }catch(e){}
+        alturaLinha = Math.max(alturaLinha, gh + 8);
+        if(col === 1){ gy += alturaLinha; col = 0; alturaLinha = 0; } else col = 1;
+      }
+    }
     const n = doc.internal.getNumberOfPages();
     for(let i = 1; i <= n; i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(107,114,128); doc.setDrawColor(58,63,71); doc.setLineWidth(0.3); doc.line(12, H-10, W-12, H-10);
       doc.text('C@P Consultoria  -  Acompanhamento de Ligações', 12, H-6); doc.text('Página ' + i + ' de ' + n, W-12, H-6, { align:'right' }); }
@@ -1694,6 +1721,40 @@ function pdfAniv(){
     colunas:['Data','Dia','Cliente','Empresa','Classif.','Idade','Celular','Telefone','Ligação hoje'],
     linhas: l.map(({d,c}) => { const lg = d === h ? ligouHoje(c.id) : null; return [fmtDM(d), nomeDia(d), c.nome, empNome(c.empresa_id), clsNome(c), idadeEm(c,d)+' anos', c.celular||'', c.telefone||'', d !== h ? '' : lg ? `Sim, ${fmtDH(lg.inicio).slice(11)} - ${vendNome(lg.vendedora_id)}` : 'Pendente']; }),
     estilos:{ 0:{cellWidth:13}, 1:{cellWidth:16}, 4:{cellWidth:14}, 5:{cellWidth:15} } });
+}
+function pdfPainel(){
+  const P = st.pdfPainel; if(!P) return;
+  const { comp, T, pm } = P, mesTxt = MESES[Number(comp.slice(5))-1]+'/'+comp.slice(0,4);
+  gerarPDF({ titulo:'Painel de Metas', arquivo:`painel_metas_${comp}.pdf`, paisagem:true,
+    subtitulo: 'Competência: ' + mesTxt + (st.painel.vend ? '  -  Vendedora: '+vendNome(Number(st.painel.vend)) : '') + clsDesc(st.painel.cls) + '  -  Dias úteis (seg a sáb): '+P.duAte+' de '+P.duTot,
+    kpis: [
+      ['Ligações no mês', fmtN(T.real), 'Meta: '+fmtN(T.meta)],
+      ['% da meta', pm+'%', 'Ritmo esperado hoje: '+fmtN(T.esp)],
+      ['Meta diária', fmtDec(T.md), P.mesCorr ? (P.domingo ? 'Domingo: sem meta' : 'Hoje: '+fmtN(T.hj)+' ligação(ões)') : P.duTot+' dias úteis'],
+      ['Contatos efetivos', fmtN(T.efet), pct(T.efet,T.real)+'% das ligações'],
+      ['Tempo em ligação', fmtDur(T.dur), 'Média '+fmtDur(T.real?T.dur/T.real:0)],
+      ['Follow-ups atrasados', fmtN(T.atr), fmtN(T.pend)+' pendentes a partir de hoje'],
+      ['Clientes novos no mês', fmtN(P.novosMes), 'Cadastrados em '+mesTxt],
+      ['Aniversariantes hoje', fmtN(P.anivN), fmtN(P.anivLig)+' já ligadas'] ],
+    resumo: 'Ranking de vendedoras - ' + mesTxt,
+    colunas:['#','Vendedora','Empresa','Meta','Meta/dia','Hoje','Realizado','Atingimento','Ritmo esperado','Situação','Efetivos','FU atrasados'],
+    linhas: P.linhas.map((x,k) => { const pp = pct(x.real,x.meta);
+      return [k+1, x.v.nome, empNome(x.v.empresa_id), fmtN(x.meta), fmtDec(x.metaDia), P.mesCorr && !P.domingo ? fmtN(x.hj) : '-', fmtN(x.real), pp+'%', fmtN(x.esperado),
+        !x.meta ? 'Sem meta' : pp>=100 ? 'Meta batida' : x.real>=x.esperado ? 'No ritmo' : 'Abaixo do ritmo', fmtN(x.efet), fmtN(x.fuAtr)]; }),
+    estilos:{ 0:{cellWidth:8}, 3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'}, 6:{halign:'right'}, 7:{halign:'right'}, 8:{halign:'right'}, 10:{halign:'right'}, 11:{halign:'right'} },
+    graficos: [ { titulo:'Realizado x Meta por vendedora', canvas:'ch1' }, { titulo:'Evolução acumulada no mês', canvas:'ch2' },
+      { titulo:'Resultado das ligações', canvas:'ch3' }, { titulo:'Follow-ups por vendedora', canvas:'ch4' }, { titulo:'Clientes novos por mês', canvas:'ch5' } ] });
+}
+function pdfVend(){
+  const l = vendsVisiveis(), comp = mesAtual(); if(!l.length) return toast('Nenhuma vendedora cadastrada.', 'err');
+  const logins = vid => db.usuarios.filter(u => u.perfil !== 'admin' && vincDe(u.id).includes(vid)).map(u => u.email + (u.ativo ? '' : ' (inativo)')).join(', ');
+  gerarPDF({ titulo:'Vendedoras', arquivo:`vendedoras_${hoje()}.pdf`, paisagem:true,
+    subtitulo: 'Metas de ' + MESES[Number(comp.slice(5))-1] + '/' + comp.slice(0,4) + '  -  ' + diasUteis(comp) + ' dias úteis (seg a sáb)',
+    resumo: `${l.length} vendedora(s)  -  ${l.filter(v=>v.ativa).length} ativa(s)  -  ${l.filter(v=>logins(v.id)).length} com login`,
+    colunas:['Vendedora','Empresa','Telefone','E-mail','Meta padrão/mês','Meta do mês','Meta/dia','Logins com acesso','Situação'],
+    linhas: l.map(v => { const m = metaDe(v.id, comp), du = diasUteis(comp);
+      return [v.nome, empNome(v.empresa_id), v.telefone||'', v.email||'', fmtN(v.meta_mensal_padrao), fmtN(m), fmtDec(du ? m/du : 0), logins(v.id) || 'Sem login', v.ativa ? 'Ativa' : 'Inativa']; }),
+    estilos:{ 0:{cellWidth:40}, 1:{cellWidth:24}, 4:{halign:'right',cellWidth:22}, 5:{halign:'right',cellWidth:20}, 6:{halign:'right',cellWidth:16}, 8:{cellWidth:16} } });
 }
 function pdfPlan(){
   const P = st.pdfPlan || { itens:[] }, l = P.itens, h = hoje();
