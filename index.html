@@ -216,6 +216,14 @@ tr.hl td{background:#FFF1E5!important;animation:hl 2.5s ease}
 .ck-row input{width:18px;height:18px;accent-color:var(--or);margin-top:1px;flex-shrink:0}
 .form.f4{grid-template-columns:repeat(4,minmax(0,1fr))}
 .plCk{width:18px;height:18px;accent-color:var(--or);cursor:pointer}
+.plCk:disabled{cursor:not-allowed;opacity:.4}
+.tag-x{border:0;background:transparent;color:inherit;cursor:pointer;font-weight:700;font-size:11px;padding:0 0 0 5px;line-height:1}
+.tag-x:hover{color:var(--bad)}
+.pl-tel{display:flex;gap:6px;flex-wrap:wrap;justify-content:inherit}
+.pl-tel input{width:140px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fff}
+.pl-tel input:focus{outline:2px solid #FDBA74;border-color:var(--or)}
+.pl-tel input.salvo{border-color:var(--ok);background:#F0FDF4}
+@media(max-width:700px){.pl-tel{justify-content:flex-end}}
 .pl-bar{position:sticky;bottom:10px;z-index:20;background:#fff;border:1px solid var(--line);border-top:3px solid var(--or);border-radius:12px;padding:10px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px;box-shadow:0 -4px 16px rgba(0,0,0,.10)}
 .pl-bar #plCnt{font-weight:700;font-size:15px}
 .pl-bar .btn{margin-left:auto}
@@ -913,20 +921,22 @@ function pgPlanejar(){
   const cl = db.clientes.filter(c => c.ativo && c.empresa_id === v.empresa_id && clsOk(c.id, p.cls)
     && (!p.cart || (p.cart === 'dela' ? c.vendedora_id === v.id : !c.vendedora_id))
     && (!q || c.nome.toLowerCase().includes(q) || (qd.length >= 4 && (discar(c.celular).includes(qd) || discar(c.telefone).includes(qd)))));
-  const pend = {}; fuVisiveis().filter(f => f.status === 'pendente').forEach(f => { if(!pend[f.cliente_id] || f.data_prevista < pend[f.cliente_id].data_prevista) pend[f.cliente_id] = f; });
+  const pend = {}; fuVisiveis().filter(f => f.status === 'pendente').sort((a,b) => a.data_prevista.localeCompare(b.data_prevista)).forEach(f => (pend[f.cliente_id] = pend[f.cliente_id] || []).push(f));
+  p.bloq = new Set(Object.keys(pend).map(Number).filter(cid => pend[cid].some(f => f.vendedora_id !== v.id)));
+  p.bloq.forEach(cid => p.sel.delete(cid));
   const s1 = cl.filter(c => ehAniv(c, p.data)).sort(nome), s2 = [];
   for(let i = 1; i <= 7; i++){ const d = addDias(p.data, i); cl.filter(c => ehAniv(c, d)).sort(nome).forEach(c => s2.push({ c, d })); }
   const jaAniv = new Set([...s1.map(c => c.id), ...s2.map(x => x.c.id)]), s3all = cl.filter(c => !jaAniv.has(c.id)).sort(nome), lim = 200, s3 = s3all.slice(0, lim);
-  const row = (c, extra) => { const u = M.ultLig[c.id], pf = pend[c.id];
-    return `<tr><td style="width:40px"><input type="checkbox" class="plCk" data-id="${c.id}" ${p.sel.has(c.id)?'checked':''} onchange="plMarcar(${c.id}, this.checked)"></td>
-      <td><b>${esc(c.nome)}</b> ${clsTag(c)} ${extra||''}${pf?` <span class="tag warn" title="${esc(vendNome(pf.vendedora_id))}">📅 ${fmtDM(pf.data_prevista)} pendente</span>`:''}</td>
-      <td class="phone">${esc([c.celular,c.telefone].filter(Boolean).join(' · ')) || '<span class="muted">—</span>'}</td>
+  const row = (c, extra) => { const u = M.ultLig[c.id], pl = pend[c.id] || [], bl = p.bloq.has(c.id);
+    return `<tr><td style="width:40px"><input type="checkbox" class="plCk" data-id="${c.id}" ${p.sel.has(c.id)?'checked':''} ${bl?'disabled title="Já agendado para outra vendedora. Desmarque no ✕ para liberar."':''} onchange="plMarcar(${c.id}, this.checked)"></td>
+      <td><b>${esc(c.nome)}</b> ${clsTag(c)} ${extra||''}${pl.map(f => ` <span class="tag ${f.vendedora_id===v.id?'warn':'bad'}" title="Follow-up pendente">📅 ${fmtDM(f.data_prevista)} · ${esc(vendNome(f.vendedora_id))}<button class="tag-x" title="Desmarcar da vendedora (cancela este follow-up)" onclick="plDesmarcarFU(${f.id})">✕</button></span>`).join('')}</td>
+      <td class="phone"><div class="pl-tel"><input value="${esc(c.celular||'')}" placeholder="Celular" title="Celular — altere e tecle Enter ou saia do campo para salvar" onchange="plSalvarTel(${c.id},'celular',this)"><input value="${esc(c.telefone||'')}" placeholder="Telefone" title="Telefone — altere e tecle Enter ou saia do campo para salvar" onchange="plSalvarTel(${c.id},'telefone',this)"></div></td>
       <td>${c.data_nascimento?fmtD(c.data_nascimento):'<span class="muted">—</span>'}</td>
       <td class="small">${u?fmtDH(u.inicio)+'<br><span class="muted">'+esc(u.resultado)+'</span>':'<span class="muted">—</span>'}</td>
       <td class="small">${c.vendedora_id?esc(vendNome(c.vendedora_id)):'<span class="muted">—</span>'}</td></tr>`; };
   const secao = (tit, cls, ids, linhas, obs) => `<div class="dayhead ${cls}">${tit} <span class="tag">${ids.length}</span>
       ${ids.length?`<button class="btn sec sm" onclick="plMarcarVarios([${ids.join(',')}],true)">Marcar todos</button><button class="btn sec sm" onclick="plMarcarVarios([${ids.join(',')}],false)">Desmarcar</button>`:''}</div>
-    <div class="tbl-wrap"><table><thead><tr><th></th><th>Cliente</th><th>Telefones</th><th>Nascimento</th><th>Última ligação</th><th>Carteira</th></tr></thead><tbody>${linhas || '<tr><td colspan="6" class="empty">Nenhum cliente.</td></tr>'}</tbody></table></div>${obs||''}`;
+    <div class="tbl-wrap"><table><thead><tr><th></th><th>Cliente</th><th>Celular / Telefone</th><th>Nascimento</th><th>Última ligação</th><th>Carteira</th></tr></thead><tbody>${linhas || '<tr><td colspan="6" class="empty">Nenhum cliente.</td></tr>'}</tbody></table></div>${obs||''}`;
   html += `<div class="card"><h3>2. Escolha os clientes · ${esc(empNome(v.empresa_id))}</h3>
     <div class="filters">
       <div class="f grow"><label>Buscar</label><input id="plQ" value="${esc(p.q)}" placeholder="Nome ou telefone" oninput="st.pl.q=this.value;clearTimeout(window._plq);window._plq=setTimeout(()=>{pgPlanejar();const i=$('plQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)},300)"></div>
@@ -941,6 +951,16 @@ function pgPlanejar(){
   <div class="pl-bar"><span id="plCnt"></span><span class="small muted" id="plInfo"></span><button class="btn" id="plOk" onclick="plCriar()">Criar follow-ups</button></div>`;
   $('content').innerHTML = html; plAtualizar();
 }
+async function plSalvarTel(id, campo, el){
+  const c = M.cli[id], val = el.value.trim() || null;
+  if(!c || (c[campo] || null) === val) return;
+  el.disabled = true;
+  try{
+    Object.assign(c, await api.upd('clientes', id, { [campo]: val }));
+    el.classList.add('salvo'); toast(`${campo === 'celular' ? 'Celular' : 'Telefone'} de ${c.nome} salvo.`, 'ok');
+  }catch(e){ el.value = c[campo] || ''; toast(e.message, 'err'); }
+  finally{ el.disabled = false; }
+}
 function plAtualizar(){
   const p = st.pl, v = M.vend[Number(p.vend)], n = p.sel.size; if(!$('plCnt')) return;
   const nAniv = [...p.sel].filter(id => M.cli[id] && ehAniv(M.cli[id], p.data)).length;
@@ -949,7 +969,14 @@ function plAtualizar(){
   $('plOk').disabled = !n; $('plOk').textContent = n ? `Criar ${fmtN(n)} follow-up(s)` : 'Criar follow-ups';
 }
 function plMarcar(id, on){ if(on) st.pl.sel.add(id); else st.pl.sel.delete(id); plAtualizar(); }
+async function plDesmarcarFU(fid){
+  const f = db.followups.find(x => x.id === fid); if(!f) return;
+  if(!confirm(`Desmarcar ${cliNome(f.cliente_id)} da vendedora ${vendNome(f.vendedora_id)}?\nO follow-up de ${fmtD(f.data_prevista)} será cancelado e o cliente fica livre para outra vendedora.`)) return;
+  try{ Object.assign(f, await api.upd('followups', fid, { status:'cancelado' })); montarNav(); pgPlanejar(); toast(`${cliNome(f.cliente_id)} desmarcado de ${vendNome(f.vendedora_id)}.`, 'ok'); }
+  catch(e){ toast(e.message, 'err'); }
+}
 function plMarcarVarios(ids, on, tudo){
+  if(on) ids = ids.filter(id => !(st.pl.bloq && st.pl.bloq.has(id)));
   if(tudo) st.pl.sel = new Set(); else ids.forEach(id => on ? st.pl.sel.add(id) : st.pl.sel.delete(id));
   document.querySelectorAll('.plCk').forEach(i => { if(tudo || ids.includes(Number(i.dataset.id))) i.checked = !tudo && on; });
   plAtualizar();
@@ -958,7 +985,7 @@ async function plCriar(){
   const p = st.pl, v = M.vend[Number(p.vend)];
   if(!v) return toast('Selecione a vendedora.', 'err');
   if(!p.data) return toast('Informe a data.', 'err');
-  const ids = [...p.sel].filter(id => M.cli[id] && M.cli[id].empresa_id === v.empresa_id);
+  const ids = [...p.sel].filter(id => M.cli[id] && M.cli[id].empresa_id === v.empresa_id && !(p.bloq && p.bloq.has(id)));
   if(!ids.length) return toast('Marque pelo menos um cliente.', 'err');
   ids.sort((a,b) => ehAniv(M.cli[b], p.data) - ehAniv(M.cli[a], p.data) || M.cli[a].nome.localeCompare(M.cli[b].nome));
   const rows = ids.map(id => ({ empresa_id:v.empresa_id, cliente_id:id, vendedora_id:v.id, data_prevista:p.data, hora:p.hora || null,
@@ -1121,6 +1148,8 @@ async function salvarFollowup(id){
   if(!cid) return toast('Selecione o cliente.', 'err');
   if(!vend) return toast('Selecione a vendedora responsável.', 'err');
   if(!data) return toast('Informe a data prevista.', 'err');
+  const outra = db.followups.find(f => f.cliente_id === cid && f.status === 'pendente' && f.vendedora_id !== vend && f.id !== id);
+  if(outra) return toast(`Este cliente já tem follow-up pendente com ${vendNome(outra.vendedora_id)} (${fmtD(outra.data_prevista)}). Desmarque antes de agendar para outra vendedora.`, 'err');
   const o = { cliente_id:cid, empresa_id: M.cli[cid].empresa_id, vendedora_id:vend, data_prevista:data, hora: $('fuHora').value || null, motivo: $('fuMot').value, descricao: $('fuDesc').value.trim() || null };
   $('fuSalvar').disabled = true;
   try{
