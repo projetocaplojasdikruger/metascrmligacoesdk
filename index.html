@@ -609,7 +609,7 @@ async function boot(){
     $('uNome').textContent = me.nome || me.email;
     $('uPerfil').textContent = isAdmin() ? 'Administrador' : ((minhas().length > 1 ? minhas().length+' vendedoras' : 'Vendedora') + ' · ' + empNome(curEmp()));
     montarEmpSel(); montarNav(); ir(st.page);
-    if(!st.avisoAniv){ st.avisoAniv = true; avisoAniversariantes(); }
+    if(!st.avisoAniv && pode('aniversariantes')){ st.avisoAniv = true; avisoAniversariantes(); }
   }catch(e){ toast(e.message, 'err'); if(!S) mostrarLogin(e.message); }
   finally{ loading(false); }
 }
@@ -637,20 +637,34 @@ const PAGES = {
   clientes:{ t:'Clientes', ic:'👥', fn:()=>pgCli() },
   vendedoras:{ t:'Vendedoras', ic:'👩‍💼', fn:()=>pgVend(), adm:true },
   empresas:{ t:'Empresas', ic:'🏢', fn:()=>pgEmp(), adm:true },
-  usuarios:{ t:'Usuários / Acessos', ic:'🔑', fn:()=>pgUsu(), adm:true }
+  usuarios:{ t:'Usuários / Acessos', ic:'🔑', fn:()=>pgUsu(), adm:true },
+  permissoes:{ t:'Permissões de Telas', ic:'🛡️', fn:()=>pgPerm(), adm:true }
 };
+/* Permissões de telas: usuarios.telas (null = todas as telas de operação liberadas) */
+const TELAS_OPER = ['painel','aniversariantes','planejamento','planejar','ligacoes','clientes'];
+function pode(k){
+  if(!PAGES[k]) return false;
+  if(isAdmin()) return true;
+  if(PAGES[k].adm) return false;
+  const t = db.me && db.me.telas;
+  return !Array.isArray(t) || t.includes(k);
+}
 function montarNav(){
   const nAniv = anivDoDia(hoje()).length;
   const nAtras = fuVisiveis().filter(f => f.status==='pendente' && f.data_prevista <= hoje()).length;
-  const item = (k, bdg) => `<a class="${st.page===k?'on':''}" onclick="ir('${k}')"><span class="ic">${PAGES[k].ic}</span>${PAGES[k].t}${bdg?`<span class="bdg">${bdg}</span>`:''}</a>`;
-  let h = '<div class="sec">Operação</div>' + item('painel') + item('aniversariantes', nAniv||'') + item('planejamento', nAtras||'') + item('planejar') + item('ligacoes') + item('clientes');
-  if(isAdmin()) h += '<div class="sec">Cadastros</div>' + item('vendedoras') + item('empresas') + item('usuarios');
+  const item = (k, bdg) => !pode(k) ? '' : `<a class="${st.page===k?'on':''}" onclick="ir('${k}')"><span class="ic">${PAGES[k].ic}</span>${PAGES[k].t}${bdg?`<span class="bdg">${bdg}</span>`:''}</a>`;
+  let h = (TELAS_OPER.some(pode) ? '<div class="sec">Operação</div>' : '') + item('painel') + item('aniversariantes', nAniv||'') + item('planejamento', nAtras||'') + item('planejar') + item('ligacoes') + item('clientes');
+  if(isAdmin()) h += '<div class="sec">Cadastros</div>' + item('vendedoras') + item('empresas') + item('usuarios') + item('permissoes');
   $('nav').innerHTML = h;
-  $('bnav').innerHTML = [['painel','Painel'],['aniversariantes','Aniversários',nAniv],['planejamento','Follow-up',nAtras],['ligacoes','Ligações'],['clientes','Clientes']]
+  $('bnav').innerHTML = [['painel','Painel'],['aniversariantes','Aniversários',nAniv],['planejamento','Follow-up',nAtras],['ligacoes','Ligações'],['clientes','Clientes']].filter(([k]) => pode(k))
     .map(([k,l,b]) => `<a class="${st.page===k?'on':''}" onclick="ir('${k}')"><span class="ic">${PAGES[k].ic}</span>${l}${b?`<span class="bdg">${b}</span>`:''}</a>`).join('');
 }
 function ir(p){
-  if(!PAGES[p] || (PAGES[p].adm && !isAdmin())) p = 'painel';
+  if(!pode(p)){
+    if($('content').innerHTML && pode(st.page) && PAGES[p]) return toast('Você não tem acesso a essa tela.', 'err');
+    p = TELAS_OPER.find(pode);
+    if(!p){ bloqueado('Nenhuma tela foi liberada para o seu usuário. Fale com o administrador.'); return; }
+  }
   st.page = p; st.charts.forEach(c => c.destroy()); st.charts = [];
   $('pgTitle').textContent = PAGES[p].t; montarNav(); toggleSide(false);
   PAGES[p].fn(); window.scrollTo(0,0);
@@ -1232,7 +1246,7 @@ async function callSalvar(){
     C.saved = true; indexar(); fecharModal(true); st.call = null;
     toast(C.fu ? 'Ligação registrada e follow-up concluído!' : 'Ligação registrada!', 'ok');
     st.hlLig = lig.id; st.lig.de = mesAtual()+'-01'; st.lig.ate = hoje(); st.lig.vend = ''; st.lig.res = ''; st.lig.q = '';
-    ir('ligacoes');
+    ir(pode('ligacoes') ? 'ligacoes' : st.page);
   }catch(e){ toast(e.message, 'err'); $('cOk').disabled = false; }
 }
 
@@ -1641,6 +1655,43 @@ async function salvarUsuario(uid){
     await setVinculos(uid, vids);
     fecharModal(true); toast('Acesso salvo.', 'ok'); ir(st.page);
   }catch(e){ toast(e.message, 'err'); $('usSalvar').disabled = false; }
+}
+
+/* ============================ PERMISSÕES DE TELAS (ADMIN) ============================ */
+function pgPerm(){
+  const us = db.usuarios.slice().sort((a,b) => (a.perfil==='admin') - (b.perfil==='admin') || (a.email||'').localeCompare(b.email||''));
+  st.perm = {}; us.forEach(u => { if(u.perfil !== 'admin') st.perm[u.id] = new Set(Array.isArray(u.telas) ? u.telas : TELAS_OPER); });
+  const cab = TELAS_OPER.map(k => `<th style="text-align:center">${PAGES[k].ic}<br>${PAGES[k].t.replace(' (Follow-up)','')}</th>`).join('');
+  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Marque as telas que cada usuário pode abrir. As telas de cadastro (Vendedoras, Empresas, Usuários e Permissões) são sempre só do administrador. O que cada login enxerga dentro das telas continua sendo definido pelas vendedoras vinculadas.</div>
+    <button class="btn" id="permOk" onclick="salvarPerm()">Salvar permissões</button></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Usuário</th><th>Vendedoras</th>${cab}<th></th></tr></thead><tbody>
+  ${us.map(u => { const adm = u.perfil === 'admin', vs = vincDe(u.id);
+    return `<tr><td><b>${esc(u.nome||u.email)}</b><div class="small muted">${esc(u.email)}${u.ativo?'':' · inativo'}</div></td>
+      <td class="small">${adm ? '<span class="tag or">Administrador</span>' : (vs.length ? vs.map(x=>esc(vendNome(x))).join(', ') : '<span class="tag bad">Não vinculada</span>')}</td>
+      ${TELAS_OPER.map(k => `<td style="text-align:center"><input type="checkbox" class="plCk" ${adm ? 'checked disabled title="Administrador tem acesso total"' : `data-u="${u.id}" data-k="${k}" ${st.perm[u.id].has(k)?'checked':''} onchange="permMarcar('${u.id}','${k}',this.checked)"`}></td>`).join('')}
+      <td class="act">${adm ? '' : `<button class="btn sec sm" onclick="permTodas('${u.id}',true)">Todas</button> <button class="btn sec sm" onclick="permTodas('${u.id}',false)">Nenhuma</button>`}</td></tr>`; }).join('') || '<tr><td colspan="9" class="empty">Nenhum usuário.</td></tr>'}
+  </tbody></table></div>`;
+}
+function permMarcar(uid, k, on){ const s = st.perm[uid]; if(on) s.add(k); else s.delete(k); }
+function permTodas(uid, on){
+  st.perm[uid] = new Set(on ? TELAS_OPER : []);
+  document.querySelectorAll(`input[data-u="${uid}"]`).forEach(i => i.checked = on);
+}
+async function salvarPerm(){
+  const mud = [];
+  for(const u of db.usuarios.filter(x => x.perfil !== 'admin')){
+    const sel = st.perm[u.id]; if(!sel) continue;
+    const novo = TELAS_OPER.every(k => sel.has(k)) ? null : TELAS_OPER.filter(k => sel.has(k));
+    if(JSON.stringify(novo) !== JSON.stringify(Array.isArray(u.telas) ? TELAS_OPER.filter(k => u.telas.includes(k)) : null)) mud.push({ u, novo });
+  }
+  const vazio = mud.find(m => m.novo && !m.novo.length && m.u.ativo);
+  if(vazio && !confirm(`${vazio.u.email} ficará sem nenhuma tela liberada e não conseguirá usar o sistema. Continuar?`)) return;
+  if(!mud.length) return toast('Nenhuma alteração para salvar.');
+  $('permOk').disabled = true;
+  try{
+    for(const m of mud) await patchUsuario(m.u.id, { telas: m.novo });
+    toast(`Permissões salvas (${mud.length} usuário(s)).`, 'ok'); pgPerm();
+  }catch(e){ toast(/telas/i.test(e.message) ? 'Coluna de permissões não encontrada. Execute o 07_permissoes_telas.sql no Supabase.' : e.message, 'err'); $('permOk').disabled = false; }
 }
 
 /* ============================ PDF (relatórios das telas) ============================ */
