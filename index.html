@@ -588,7 +588,7 @@ async function carregarDados(){
   indexar();
 }
 
-async function carregarUV(){ try{ db.uv = await sbAll('usuario_vendedoras', isAdmin() ? 'select=*' : 'select=*&usuario_id=eq.'+db.me.id); }catch(e){ db.uv = []; } }
+async function carregarUV(){ try{ db.uv = await sbAll('usuario_vendedoras', isAdmin() ? 'select=*' : 'select=*&usuario_id=eq.'+db.me.id); }catch(e){ db.uv = []; if(isAdmin()) setTimeout(() => toast('Não foi possível ler os vínculos de login (usuario_vendedoras): '+e.message, 'err'), 900); } }
 async function boot(){
   loading(true, 'Carregando dados…');
   try{
@@ -1410,7 +1410,7 @@ function pgVend(){
   <div class="tbl-wrap"><table><thead><tr><th>Vendedora</th><th>Empresa</th><th>Contato</th><th class="num">Meta padrão/mês</th><th class="num">Meta ${comp.slice(5)}/${comp.slice(0,4)}</th><th>Acesso</th><th>Situação</th><th></th></tr></thead><tbody>
   ${l.map(v => { const us = usus(v.id); return `<tr><td><b>${esc(v.nome)}</b></td><td>${empTag(v.empresa_id)}</td><td class="small">${esc(v.telefone)}${v.email?'<br>'+esc(v.email):''}</td><td class="num">${fmtN(v.meta_mensal_padrao)}</td><td class="num"><b>${fmtN(metaDe(v.id, comp))}</b></td>
     <td>${us.length?us.map(u=>`<span class="tag ${u.ativo?'ok':''}">${esc(u.email)}${u.ativo?'':' (inativo)'}</span>`).join(' ')+` <button class="btn sec sm" title="Empresa e logins" onclick="abrirVinculo(${v.id})">🔗</button>`:`<button class="btn sm" onclick="abrirVinculo(${v.id})">🔗 Vincular empresa e usuário</button>`}</td><td>${v.ativa?'<span class="tag ok">Ativa</span>':'<span class="tag">Inativa</span>'}</td>
-    <td class="act"><button class="btn sec sm" onclick="abrirMetas(${v.id})">🎯 Metas</button> <button class="btn sec sm" onclick="abrirVend(${v.id})">✎</button></td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
+    <td class="act"><button class="btn sec sm" onclick="abrirMetas(${v.id})">🎯 Metas</button> <button class="btn sec sm" onclick="abrirVend(${v.id})">✎</button> <button class="btn danger sm" title="Excluir vendedora" onclick="excluirVend(${v.id})">🗑</button></td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
   </tbody></table></div>`;
 }
 async function patchUsuario(id, o){
@@ -1465,6 +1465,31 @@ async function salvarVinculo(vid){
     toast([mudouEmp ? 'Empresa vinculada: '+empNome(emp) : '', mud.length ? `${mud.filter(m=>m.quer).length} login(s) vinculado(s), ${mud.filter(m=>!m.quer).length} desvinculado(s)` : ''].filter(Boolean).join(' · ') + '.', 'ok');
     pgVend();
   }catch(e){ toast(e.message, 'err'); $('vcOk').disabled = false; }
+}
+async function excluirVend(id){
+  const v = M.vend[id]; if(!v) return;
+  const nL = db.ligacoes.filter(l => l.vendedora_id === id).length, nF = db.followups.filter(f => f.vendedora_id === id).length;
+  if(nL || nF) return abrirModal('Não é possível excluir',
+    `<p style="margin-top:0"><b>${esc(v.nome)}</b> tem ${fmtN(nL)} ligação(ões) e ${fmtN(nF)} follow-up(s) registrados. Para não perder o histórico e os gráficos, ela não pode ser excluída.</p><p>Use <b>Inativar</b>: ela sai das listas e não recebe novos agendamentos, mas o histórico continua.</p>`,
+    `<button class="btn sec" onclick="fecharModal()">Fechar</button>${v.ativa?`<button class="btn" onclick="inativarVend(${id})">Inativar</button>`:''}`);
+  const nC = db.clientes.filter(c => c.vendedora_id === id).length;
+  if(!confirm(`Excluir a vendedora ${v.nome}?${nC ? `\n${nC} cliente(s) da carteira dela ficarão sem carteira.` : ''}\nEssa ação não pode ser desfeita.`)) return;
+  loading(true, 'Excluindo…');
+  try{
+    if(nC) await sbFetch(`/rest/v1/clientes?vendedora_id=eq.${id}`, { method:'PATCH', body:{ vendedora_id:null } });
+    await sbFetch(`/rest/v1/metas?vendedora_id=eq.${id}`, { method:'DELETE' });
+    for(const u of db.usuarios.filter(u => u.perfil !== 'admin' && vincDe(u.id).includes(id))) await aplicarVinculos(u, vincDe(u.id).filter(x => x !== id));
+    await api.del('vendedoras', id);
+    db.clientes.forEach(c => { if(c.vendedora_id === id) c.vendedora_id = null; });
+    db.metas = db.metas.filter(m => m.vendedora_id !== id); db.uv = db.uv.filter(x => Number(x.vendedora_id) !== id);
+    db.vendedoras = db.vendedoras.filter(x => x.id !== id); delete M.vend[id];
+    toast('Vendedora excluída.', 'ok'); pgVend();
+  }catch(e){ toast(e.message, 'err'); }
+  finally{ loading(false); }
+}
+async function inativarVend(id){
+  try{ Object.assign(M.vend[id], await api.upd('vendedoras', id, { ativa:false })); fecharModal(true); toast('Vendedora inativada.', 'ok'); pgVend(); }
+  catch(e){ toast(e.message, 'err'); }
 }
 function abrirVend(id){
   const v = id ? M.vend[id] : null, emp = v ? v.empresa_id : (curEmp() || (db.empresas[0]||{}).id);
