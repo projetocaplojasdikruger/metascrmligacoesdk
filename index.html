@@ -1082,7 +1082,7 @@ function pgPlan(){
         ${f.descricao?`<div class="ds">${esc(f.descricao)}</div>`:''}
         <div class="mt"><span>👩‍💼 ${esc(vendNome(f.vendedora_id))}</span><span class="phone">📞 ${esc([c.celular,c.telefone].filter(Boolean).join(' · ')||'sem telefone')}</span>${f.status==='concluido'&&f.concluido_em?`<span>✔ ${fmtDH(f.concluido_em)}</span>`:''}</div></div>
       <div class="ac">
-        ${f.status==='pendente' ? `<button class="btn sec sm" title="Mensagem / áudio no WhatsApp" onclick="abrirContato(${f.cliente_id},${f.vendedora_id})">💬🎤</button><button class="btn sec sm" onclick="abrirFollowup({id:${f.id}})">✎ Editar</button><button class="btn danger sm" onclick="cancelarFU(${f.id})">✕</button><button class="playbtn" title="Iniciar ligação" onclick="abrirLigacao({followupId:${f.id}})">▶</button>`
+        ${f.status==='pendente' ? `<button class="btn sec sm" title="Mensagem / áudio no WhatsApp" onclick="abrirContato(${f.cliente_id},${f.vendedora_id},${f.motivo==='Aniversário'})">💬🎤</button><button class="btn sec sm" onclick="abrirFollowup({id:${f.id}})">✎ Editar</button><button class="btn danger sm" onclick="cancelarFU(${f.id})">✕</button><button class="playbtn" title="Iniciar ligação" onclick="abrirLigacao({followupId:${f.id}})">▶</button>`
           : f.ligacao_id ? `<button class="btn sec sm" onclick="st.hlLig=${f.ligacao_id};st.lig.de='';st.lig.ate='';ir('ligacoes')">Ver ligação</button>` : ''}
       </div></div>`;
   });
@@ -1389,7 +1389,7 @@ function abrirLigacao({ followupId, clienteId, motivo }){
     </div></div>`,
     `<button class="btn sec" onclick="fecharModal()">Cancelar</button><button class="btn ok" id="cOk" disabled onclick="callSalvar()">✓ Confirmar e concluir</button>`,
     false, () => { if(st.call && st.call.t0 && !st.call.saved && !confirm('Descartar esta ligação? Ela não será registrada.')) return false; if(st.call) clearInterval(st.call.iv); st.call = null; });
-  $('ctBox').innerHTML = ctPainelHTML(c);
+  $('ctBox').innerHTML = ctPainelHTML(c, st.call.motivo === 'Aniversário');
 }
 function callPlayAuto(){ if(st.call && !st.call.t0) callPlay(); }
 function callPlay(){
@@ -2050,11 +2050,24 @@ function ctVendId(){ const e = $('ctVend') || $('cVend'); return e ? Number(e.va
 function ctMsgPadrao(c, vid){
   return `${saudacao()} ${primeiroNome(c.nome)}, tudo bem? Aqui é a ${vid ? primeiroNome(vendNome(vid)) : '…'} da ${tituloNome(empNome(c.empresa_id))}. `;
 }
-function ctAtualizarTxt(cid){ const t = $('ctTxt'); if(t && !t.dataset.ed) t.value = ctMsgPadrao(M.cli[cid], ctVendId()); }
-function ctPainelHTML(c){
+function anivPerto(c){ for(let i = -7; i <= 7; i++) if(ehAniv(c, addDias(hoje(), i))) return true; return false; }
+function ctEhAniv(){ return !!($('ctAniv') && $('ctAniv').checked); }
+function ctTextoAuto(c, vid){ return ctEhAniv() ? (vid ? msgAniv(c, vid) : 'Selecione a vendedora para montar a mensagem de aniversário.') : ctMsgPadrao(c, vid); }
+function ctAtualizarTxt(cid){ const t = $('ctTxt'); if(t && !t.dataset.ed) t.value = ctTextoAuto(M.cli[cid], ctVendId()); }
+function ctAnivToggle(cid){
+  const c = M.cli[cid], on = ctEhAniv(), card = $('ctCard');
+  if(card) card.classList.toggle('hidden', !on);
+  $('ctTxt').dataset.ed = ''; $('ctTxt').style.minHeight = on ? '220px' : ''; ctAtualizarTxt(cid);
+  $('ctEnviarBtn').textContent = on ? (cartaoDe(c) ? 'Enviar cartão + mensagem no WhatsApp' : 'Enviar mensagem de aniversário') : 'Enviar mensagem no WhatsApp';
+}
+function ctPainelHTML(c, aniv){
+  aniv = aniv || anivPerto(c);
+  const card = cartaoDe(c), vid = ctVendId();
   return `<div class="ctt"><h4>💬 Mensagem</h4>
-    <textarea id="ctTxt" oninput="this.dataset.ed=1">${esc(ctMsgPadrao(c, ctVendId()))}</textarea>
-    <div class="row"><button class="btn wa sm" onclick="ctEnviarMsg(${c.id})">Enviar mensagem no WhatsApp</button><button class="btn sec sm" onclick="navigator.clipboard.writeText($('ctTxt').value).then(()=>toast('Mensagem copiada.','ok'))">📋 Copiar</button></div></div>
+    <label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin-bottom:8px;font-weight:600"><input type="checkbox" id="ctAniv" style="width:18px;height:18px;accent-color:var(--or)" ${aniv?'checked':''} onchange="ctAnivToggle(${c.id})"> 🎂 Mensagem de aniversário ${card?'com cartão':''}${c.data_nascimento?` <span class="small muted" style="font-weight:400">(nasc. ${fmtD(c.data_nascimento)})</span>`:''}</label>
+    ${card ? `<div id="ctCard" class="${aniv?'':'hidden'}" style="text-align:center;margin-bottom:8px"><img src="${card}" alt="Cartão de aniversário" style="max-width:210px;width:100%;border-radius:10px;border:1px solid var(--line)"></div>` : ''}
+    <textarea id="ctTxt" oninput="this.dataset.ed=1" style="${aniv?'min-height:220px':''}">${esc(aniv ? (vid ? msgAniv(c, vid) : 'Selecione a vendedora para montar a mensagem de aniversário.') : ctMsgPadrao(c, vid))}</textarea>
+    <div class="row"><button class="btn wa sm" id="ctEnviarBtn" onclick="ctEnviarMsg(${c.id})">${aniv ? (card ? 'Enviar cartão + mensagem no WhatsApp' : 'Enviar mensagem de aniversário') : 'Enviar mensagem no WhatsApp'}</button><button class="btn sec sm" onclick="navigator.clipboard.writeText($('ctTxt').value).then(()=>toast('Mensagem copiada.','ok'))">📋 Copiar</button></div></div>
   <div class="ctt"><h4>🎤 Áudio</h4>
     <div class="row"><button class="btn sm" id="ctRec" onclick="ctGravar()">🎤 Gravar áudio</button><span id="ctRecSt" class="small muted">Toque para gravar e toque de novo para parar.</span></div>
     <div id="ctAudBox" class="hidden"><audio id="ctAud" controls></audio>
@@ -2064,6 +2077,7 @@ function ctEnviarMsg(cid){
   const c = M.cli[cid], f = foneWa(c), txt = ($('ctTxt') ? $('ctTxt').value : '').trim();
   if(!f) return toast('Cliente sem telefone cadastrado.', 'err');
   if(!txt) return toast('Escreva a mensagem.', 'err');
+  if(ctEhAniv()){ if(!ctVendId()) return toast('Selecione a vendedora.', 'err'); enviarAniv(c, txt); return; }
   window.open(`https://wa.me/55${f}?text=${encodeURIComponent(txt)}`, '_blank', 'noopener');
 }
 function ctMime(){
@@ -2121,13 +2135,13 @@ function ctEnviarAudio(cid){
   const f = foneWa(c); if(f) window.open(`https://wa.me/55${f}`, '_blank', 'noopener');
   toast('Áudio salvo no computador. Na conversa do WhatsApp, anexe o arquivo baixado (📎).', 'ok');
 }
-function abrirContato(cid, vid){
+function abrirContato(cid, vid, aniv){
   const c = M.cli[cid]; if(!c) return;
   vid = vid || vendPadraoCli(c);
   abrirModal('💬 Mensagem e áudio · ' + esc(c.nome), `<div class="form"><div class="full"><label>Vendedora que envia</label><select id="ctVend" onchange="ctAtualizarTxt(${cid})">${vendOptions(vid,'Selecione…',c.empresa_id)}</select></div></div>
     <div class="small muted" style="margin-top:8px">WhatsApp: ${foneWa(c) ? esc([c.celular, c.telefone].filter(Boolean).join(' · ')) : '<span style="color:var(--bad)">sem telefone</span>'} · Loja: ${esc(empNome(c.empresa_id))}</div>
     <div id="ctBox"></div>`, `<button class="btn sec" onclick="fecharModal()">Fechar</button>`);
-  $('ctBox').innerHTML = ctPainelHTML(c);
+  $('ctBox').innerHTML = ctPainelHTML(c, aniv);
 }
 function ctToggleLig(){ const b = $('ctBox'); if(!b) return; b.classList.toggle('hidden'); if(!b.classList.contains('hidden')) b.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
 
