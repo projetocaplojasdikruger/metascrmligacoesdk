@@ -754,7 +754,17 @@ function fecharModal(forcar){
 $('modal').addEventListener('mousedown', e => { if(e.target.id === 'modal') fecharModal(); });
 
 /* ============================ FILTROS COMUNS ============================ */
-function fuVisiveis(){ return db.followups.filter(f => empOk(f.empresa_id) && (isAdmin() || minhas().includes(f.vendedora_id))); }
+/* Follow-up de aniversário: data do aniversário mais próxima da data prevista; some do planejamento 2 dias após o aniversário */
+function anivDataFU(f){
+  const c = M.cli[f.cliente_id]; if(!c || !c.data_nascimento) return f.data_prevista;
+  const md = c.data_nascimento.slice(5,10), y = Number(f.data_prevista.slice(0,4)), alvo = new Date(f.data_prevista+'T12:00:00');
+  let best = null, dist = Infinity;
+  [y-1, y, y+1].forEach(a => { const bis = (a%4===0 && a%100!==0) || a%400===0, iso = a+'-'+(md==='02-29' && !bis ? '02-28' : md), d = Math.abs(new Date(iso+'T12:00:00') - alvo); if(d < dist){ dist = d; best = iso; } });
+  return best;
+}
+const anivExpirado = f => f.status === 'pendente' && f.motivo === 'Aniversário' && addDias(anivDataFU(f), 2) < hoje();
+function fuVisiveis(){ return db.followups.filter(f => empOk(f.empresa_id) && (isAdmin() || minhas().includes(f.vendedora_id)) && !anivExpirado(f)); }
+const anivTag = c => c && c.data_nascimento ? `<span class="tag warn" title="Data de aniversário">🎂 ${fmtDM(c.data_nascimento)}</span>` : '';
 function ligVisiveis(){ return db.ligacoes.filter(l => empOk(l.empresa_id) && (isAdmin() || minhas().includes(l.vendedora_id))); }
 function cliVisiveis(){ return db.clientes.filter(c => empOk(c.empresa_id)); }
 function vendOptions(sel, todasLabel, empId){
@@ -1078,7 +1088,7 @@ function pgPlan(){
     const stTag = f.status==='concluido' ? '<span class="tag ok">Concluído</span>' : f.status==='cancelado' ? '<span class="tag">Cancelado</span>' : late ? '<span class="tag bad">Atrasado</span>' : '<span class="tag warn">Pendente</span>';
     html += `<div class="fu ${f.status==='concluido'?'done':f.status==='cancelado'?'canc':late?'late':''}">
       <div class="hr">${f.hora ? f.hora.slice(0,5) : '--:--'}</div>
-      <div class="bd"><b>${esc(c.nome||'(cliente)')}</b> ${clsTag(c)} <span class="tag or">${esc(f.motivo)}</span> ${stTag} ${curEmp()?'':empTag(f.empresa_id)}
+      <div class="bd"><b>${esc(c.nome||'(cliente)')}</b> ${clsTag(c)} ${anivTag(c)} <span class="tag or">${esc(f.motivo)}</span> ${stTag} ${curEmp()?'':empTag(f.empresa_id)}
         ${f.descricao?`<div class="ds">${esc(f.descricao)}</div>`:''}
         <div class="mt"><span>👩‍💼 ${esc(vendNome(f.vendedora_id))}</span><span class="phone">📞 ${esc([c.celular,c.telefone].filter(Boolean).join(' · ')||'sem telefone')}</span>${f.status==='concluido'&&f.concluido_em?`<span>✔ ${fmtDH(f.concluido_em)}</span>`:''}</div></div>
       <div class="ac">
@@ -1209,7 +1219,7 @@ function pgPlanSemana(base, kpis){
   const cardH = f => { const c = M.cli[f.cliente_id]||{}, pend = f.status==='pendente', late = pend && f.data_prevista < h;
     return `<div class="wk-card ${f.status==='concluido'?'done':late?'late':''}" data-id="${f.id}" ${pend?'data-drag="1"':''}>
       <div class="wk-top"><span class="hr">${f.hora?f.hora.slice(0,5):(late&&f.data_prevista<ini?fmtDM(f.data_prevista):'')}</span><span class="tag or">${esc(f.motivo)}</span></div>
-      <b>${esc(c.nome||'(cliente)')}</b> ${clsTag(c)}
+      <b>${esc(c.nome||'(cliente)')}</b> ${clsTag(c)} ${anivTag(c)}
       ${f.descricao?`<div class="wk-ds">${esc(f.descricao)}</div>`:''}
       <div class="small muted">👩‍💼 ${esc(vendNome(f.vendedora_id))}${curEmp()?'':' · '+esc(empNome(f.empresa_id))}</div>
       <div class="wk-ac">${pend ? `<button class="btn sec sm" onclick="abrirFollowup({id:${f.id}})">✎</button><button class="playbtn" title="Iniciar ligação" onclick="abrirLigacao({followupId:${f.id}})">▶</button>` : '<span class="tag ok">Concluído</span>'}</div></div>`; };
@@ -1341,7 +1351,7 @@ async function salvarFollowup(id){
   if(!cid) return toast('Selecione o cliente.', 'err');
   if(!vend) return toast('Selecione a vendedora responsável.', 'err');
   if(!data) return toast('Informe a data prevista.', 'err');
-  const outra = db.followups.find(f => f.cliente_id === cid && f.status === 'pendente' && f.vendedora_id !== vend && f.id !== id);
+  const outra = db.followups.find(f => f.cliente_id === cid && f.status === 'pendente' && !anivExpirado(f) && f.vendedora_id !== vend && f.id !== id);
   if(outra) return toast(`Este cliente já tem follow-up pendente com ${vendNome(outra.vendedora_id)} (${fmtD(outra.data_prevista)}). Desmarque antes de agendar para outra vendedora.`, 'err');
   const o = { cliente_id:cid, empresa_id: M.cli[cid].empresa_id, vendedora_id:vend, data_prevista:data, hora: $('fuHora').value || null, motivo: $('fuMot').value, descricao: $('fuDesc').value.trim() || null };
   $('fuSalvar').disabled = true;
