@@ -152,6 +152,48 @@ tr.hl td{background:#FFF1E5!important;animation:hl 2.5s ease}
 .empty{padding:36px;text-align:center;color:var(--mut)}
 .phone{white-space:nowrap}
 .chartbox{position:relative;height:280px}
+.chartbox.sm{height:250px}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pn-top{display:grid;grid-template-columns:minmax(330px,1.1fr) 2fr;gap:14px;margin-bottom:14px}
+.pn-hero{display:flex;gap:20px;align-items:center}
+.ring{--p:0;--c:var(--or);width:128px;height:128px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--line) 0)}
+.ring>div{width:100px;height:100px;border-radius:50%;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring b{font-size:26px;line-height:1}.ring span{font-size:11px;color:var(--mut);margin-top:3px}
+.pn-hero .hx{flex:1;min-width:0}
+.pn-hero .big{font-size:30px;font-weight:800;margin:2px 0 6px;letter-spacing:-.02em}.pn-hero .big span{font-size:16px;color:var(--mut);font-weight:600}
+.pn-hero .hl{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+.pn-hero .hl div{display:flex;flex-direction:column}.pn-hero .hl span{font-size:11px;color:var(--mut)}.pn-hero .hl b{font-size:16px}
+.cok{color:var(--ok)!important}.cbad{color:var(--bad)!important}
+.pn-mk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.mk{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;position:relative;overflow:hidden}
+.mk::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line)}
+.mk.ok::before{background:var(--ok)}.mk.bad::before{background:var(--bad)}.mk.warn::before{background:var(--warn)}
+.mk .l{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+.mk .v{font-size:22px;font-weight:700;margin-top:2px}.mk .v small{font-size:13px;color:var(--mut);font-weight:600}
+.mk .s{font-size:11.5px;color:var(--mut)}
+.mk.click{cursor:pointer}.mk.click:hover{border-color:var(--or)}
+.mk.bad .v{color:var(--bad)}
+.pn-mid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:14px;margin-bottom:14px}
+.pn-bot{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:14px}
+.card h3 .lg{margin-left:auto;font-size:11px;font-weight:500;color:var(--mut);display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.card h3 .lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-left:6px}
+.card h3 .lg i.mkr,.bul i{width:2px;height:12px;background:var(--tx);border-radius:1px}
+.acoes{display:flex;flex-direction:column;gap:8px;max-height:262px;overflow:auto;padding-right:2px}
+.acao{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;border:1px solid var(--line);border-left:3px solid var(--info)}
+.acao.bad{border-left-color:var(--bad);background:var(--badl)}.acao.warn{border-left-color:var(--warn);background:var(--warnl)}.acao.ok{border-left-color:var(--ok);background:var(--okl)}
+.acao .ai{font-size:18px}.acao .at{flex:1;min-width:0;font-size:13px}.acao .btn{flex-shrink:0}
+.bul{display:flex;align-items:center;gap:10px}.bul>span{white-space:nowrap;font-size:12.5px;color:var(--mut)}.bul>span b{color:var(--tx)}
+.bul .bar{position:relative;flex:1;height:10px;background:var(--line);border-radius:6px;min-width:110px}
+.bul .fill{height:100%;border-radius:6px;background:var(--or)}.bul .fill.ok{background:var(--ok)}.bul .fill.ritmo{background:var(--info)}.bul .fill.abaixo{background:var(--bad)}.bul .fill.sem{background:var(--mut)}
+.bul i{position:absolute;top:-2px;height:14px;transform:translateX(-1px)}
+.pn-tbl td{padding-top:9px;padding-bottom:9px}
+.rbars{display:flex;flex-direction:column;gap:9px}
+.rb{display:grid;grid-template-columns:175px 1fr 38px 38px;gap:8px;align-items:center;font-size:12.5px}
+.rb .bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden}.rb .bar div{height:100%;border-radius:6px}
+.rb b{text-align:right}.rb em{font-style:normal;color:var(--mut);text-align:right}
+@media(max-width:1100px){.pn-top,.pn-mid,.pn-bot{grid-template-columns:1fr}}
+@media(max-width:600px){.pn-mk{grid-template-columns:repeat(2,minmax(0,1fr))}.pn-hero{flex-direction:column;align-items:flex-start}.rb{grid-template-columns:110px 1fr 30px 34px}}
+
 .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
 .tabs button{border:1px solid var(--line);background:var(--card);padding:8px 14px;border-radius:20px;cursor:pointer;font-weight:600;color:var(--mut)}
 .tabs button.on{background:var(--gr);color:#fff;border-color:var(--gr)}
@@ -933,10 +975,10 @@ function pgAniv(){
 /* Rótulos de dados nos gráficos (sem biblioteca extra) */
 const rotulosPlugin = { id:'rotulos', afterDatasetsDraw(ch, args, opt){
   if(!opt || !opt.on) return;
-  const ctx = ch.ctx, tipo = ch.config.type, fmt = opt.fmt || fmtDec, ys = ch.options.scales && ch.options.scales.y, stacked = !!(ys && ys.stacked);
+  const ctx = ch.ctx, tipoCh = ch.config.type, fmt = opt.fmt || fmtDec, ys = ch.options.scales && ch.options.scales.y, stacked = !!(ys && ys.stacked);
   ctx.save(); ctx.font = "600 11px 'Segoe UI',system-ui,Arial,sans-serif"; ctx.textAlign = 'center';
   ch.data.datasets.forEach((ds, i) => {
-    if(!ch.isDatasetVisible(i)) return; const m = ch.getDatasetMeta(i);
+    if(!ch.isDatasetVisible(i) || (opt.max && i >= opt.max)) return; const m = ch.getDatasetMeta(i); const tipo = ds.type || tipoCh;
     if(tipo === 'doughnut'){
       const tot = ds.data.reduce((a,b) => a+(b||0), 0);
       m.data.forEach((el, j) => { const v = ds.data[j]; if(!v || !tot || v/tot < .05) return; const p = el.tooltipPosition();
@@ -988,6 +1030,41 @@ function pgPainel(){
   const pm = pct(T.real, T.meta), ord = linhas.slice().sort((a,b)=>pct(b.real,b.meta)-pct(a.real,a.meta)||b.real-a.real);
   const anoN = p.anoNovos || anoAt, anos = []; for(let y = Math.min(anoAt-2, Number(comp.slice(0,4))); y <= anoAt+1; y++) anos.push(y);
   const perDoTxt = dia ? 'no dia' : 'no mês';
+  const mesTxt = MESES[Number(comp.slice(5))-1]+'/'+comp.slice(0,4);
+  const proj = x => dia ? null : comp < h.slice(0,7) ? x.real : (duAte ? Math.round(x.real / duAte * duTot) : 0);
+  linhas.forEach(x => { x.pp = pct(x.real, x.meta); x.proj = proj(x); x.cont = pct(x.efet, x.real); x.falta = Math.max(0, Math.ceil(x.metaDia) - x.hj);
+    x.sit = !x.meta ? 'sem' : x.pp >= 100 ? 'ok' : x.real >= x.esperado ? 'ritmo' : 'abaixo'; });
+  const projT = dia ? null : comp < h.slice(0,7) ? T.real : (duAte ? Math.round(T.real / duAte * duTot) : 0);
+  const sitT = !T.meta ? ['', 'Sem meta definida'] : pm >= 100 ? ['ok', 'Meta batida 🎉'] : T.real >= T.esp ? ['info', 'No ritmo da meta'] : ['bad', 'Abaixo do ritmo'];
+  const SIT = { sem:'<span class="tag">Sem meta</span>', ok:'<span class="tag ok">Meta batida</span>', ritmo:'<span class="tag info">No ritmo</span>', abaixo:'<span class="tag bad">Abaixo do ritmo</span>' };
+  const rc = RESULTADOS.map(r => ligs.filter(l => l.resultado === r).length), rcTot = rc.reduce((a,b)=>a+b,0);
+  const anivH = anivDoDia(h), anivPend = anivH.filter(c => !ligouHoje(c.id)).length;
+  const hojeAtivo = mesCorr && !domingo;
+  const metaHoje = linhas.reduce((s,x) => s + Math.ceil(x.metaDia), 0), faltaHoje = linhas.reduce((s,x) => s + (x.metaDia > 0 ? x.falta : 0), 0);
+
+  /* ---------- Ações prioritárias (o que fazer agora) ---------- */
+  const acoes = [];
+  const ac = (nivel, ic, txt, sub, btn) => acoes.push({ nivel, html:`<div class="acao ${nivel}"><div class="ai">${ic}</div><div class="at"><b>${txt}</b>${sub?`<div class="small muted">${sub}</div>`:''}</div>${btn||''}</div>` });
+  if(T.atr) ac('bad','⏰', `${fmtN(T.atr)} follow-up(s) atrasado(s)`, linhas.filter(x=>x.fuAtr).sort((a,b)=>b.fuAtr-a.fuAtr).slice(0,4).map(x=>`${esc(x.v.nome)} (${x.fuAtr})`).join(' · '),
+    `<button class="btn sm" onclick="st.plan.filtro='atrasados';st.plan.view='lista';ir('planejamento')">Resolver</button>`);
+  if(anivPend) ac('warn','🎂', `${anivPend} aniversariante(s) de hoje sem ligação`, `${anivH.length - anivPend} de ${anivH.length} já receberam ligação`,
+    `<button class="btn sm" onclick="st.aniv.tab='hoje';ir('aniversariantes')">Ligar</button>`);
+  if(hojeAtivo){
+    const atras = linhas.filter(x => x.metaDia > 0 && x.falta > 0).sort((a,b) => b.falta - a.falta);
+    if(atras.length) ac(T.real < T.esp ? 'bad' : 'warn','📞', `Faltam ${fmtN(faltaHoje)} ligação(ões) para a meta de hoje`,
+      atras.slice(0,3).map(x => `${esc(x.v.nome.split(' ')[0])} ${x.hj}/${Math.ceil(x.metaDia)}`).join(' · ') + (atras.length > 3 ? ` · +${atras.length-3} vendedora(s)` : ''),
+      atras.length === 1 ? `<button class="btn sm" onclick="st.pl.vend='${atras[0].v.id}';st.pl.sel=new Set();ir('planejar')">Planejar</button>` : `<button class="btn sm" onclick="ir('planejar')">Planejar</button>`);
+  }
+  const inval = rc[RESULTADOS.indexOf('Número inválido')];
+  if(inval) ac('warn','📵', `${fmtN(inval)} ligação(ões) com número inválido`, 'Atualize os telefones desses clientes para não perder contatos',
+    `<button class="btn sec sm" onclick="st.lig.res='Número inválido';st.lig.de='${comp}-01';st.lig.ate='${comp}-${pad(nd)}';st.lig.vend='';ir('ligacoes')">Ver lista</button>`);
+  if(T.real >= 10 && pct(T.efet, T.real) < 30) ac('info','💬', `Taxa de contato baixa: ${pct(T.efet, T.real)}%`, 'Teste outros horários ou envie mensagem/áudio no WhatsApp antes de ligar');
+  if(projT !== null && T.meta && mesCorr && projT < T.metaMes) ac('info','📈', `Projeção de fechamento: ${fmtN(projT)} de ${fmtN(T.metaMes)} (${pct(projT, T.metaMes)}%)`, `Para bater a meta: ≈ ${fmtDec(Math.max(0, T.metaMes - T.real) / Math.max(1, duTot - duAte + (domingo ? 0 : 1)))} ligações por dia útil restante`);
+  if(!acoes.length) ac('ok','✅', 'Tudo em dia!', 'Sem atrasos e equipe dentro do ritmo da meta.');
+  const ordN = { bad:0, warn:1, info:2, ok:3 }; acoes.sort((a,b) => ordN[a.nivel] - ordN[b.nivel]);
+
+  const ring = Math.min(pm, 100), ringCor = !T.meta ? 'var(--mut)' : pm >= 100 ? 'var(--ok)' : T.real >= T.esp ? 'var(--info)' : 'var(--bad)';
+  const mini = (lb, v, s, cls, onc) => `<div class="mk ${cls||''} ${onc?'click':''}" ${onc?`onclick="${onc}"`:''}><div class="l">${lb}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
 
   $('content').innerHTML = avisoCaixa() + `
   <div class="filters">
@@ -996,71 +1073,81 @@ function pgPainel(){
     <div class="f"><label>Ano</label><select onchange="st.painel.comp=this.value+'-'+(st.painel.comp||mesAtual()).slice(5);pgPainel()">${anos.map(y=>`<option ${Number(comp.slice(0,4))===y?'selected':''}>${y}</option>`).join('')}</select></div>
     ${verVendFiltro()?`<div class="f"><label>Vendedora</label><select onchange="st.painel.vend=this.value;pgPainel()">${vendOptions(p.vend,'Todas')}</select></div>`:''}
     ${clsFiltro(p.cls, "st.painel.cls=this.value;pgPainel()")}
-    <div class="f small muted" style="padding-bottom:9px">${dia ? (diaUtil ? 'Dia útil · meta do dia = meta do mês ÷ '+duTot : 'Domingo: sem meta') : 'Dias úteis (seg a sáb): '+duAte+' de '+duTot}</div>
+    <div class="f grow small muted" style="padding-bottom:9px"><span>${dia ? (diaUtil ? 'Dia útil · meta do dia = meta do mês ÷ '+duTot : 'Domingo: sem meta') : 'Dias úteis (seg a sáb): <b>'+duAte+'</b> de '+duTot}</span></div>
     <button class="btn sec" onclick="pdfPainel()">📄 Gerar PDF</button>
   </div>
-  <div class="kpis">
-    <div class="kpi"><div class="l">Ligações ${perDoTxt}</div><div class="v">${fmtN(T.real)}</div><div class="s">Meta ${dia?'do dia':''}: ${fmtDec(T.meta)}</div></div>
-    <div class="kpi ${pm>=100?'ok':T.real>=T.esp?'info':'bad'}"><div class="l">% da meta</div><div class="v">${pm}%</div><div class="s">${dia ? perTxt : 'Ritmo esperado hoje: '+fmtN(T.esp)}</div></div>
-    <div class="kpi info"><div class="l">Meta diária</div><div class="v">${fmtDec(T.md)}</div><div class="s">${mesCorr ? (domingo ? 'Domingo: sem meta' : 'Hoje: '+fmtN(T.hj)+' ligação(ões)') : duTot+' dias úteis (seg a sáb)'}</div></div>
-    <div class="kpi ok"><div class="l">Contatos efetivos</div><div class="v">${fmtN(T.efet)}</div><div class="s">${pct(T.efet,T.real)}% das ligações atendidas</div></div>
-    <div class="kpi dk"><div class="l">Tempo em ligação</div><div class="v">${fmtDur(T.dur)}</div><div class="s">Média ${fmtDur(T.real?T.dur/T.real:0)} por ligação</div></div>
-    <div class="kpi bad click" onclick="st.plan.filtro='atrasados';ir('planejamento')"><div class="l">Follow-ups atrasados</div><div class="v">${fmtN(T.atr)}</div><div class="s">${fmtN(T.pend)} pendentes a partir de hoje</div></div>
-    <div class="kpi dk"><div class="l">Clientes novos ${perDoTxt}</div><div class="v">${fmtN(novosMes)}</div><div class="s">Cadastrados em ${perTxt}</div></div>
-    <div class="kpi warn click" onclick="st.aniv.tab='hoje';ir('aniversariantes')"><div class="l">Aniversariantes hoje</div><div class="v">${anivDoDia(h).length}</div><div class="s">${anivDoDia(h).filter(c=>ligouHoje(c.id)).length} já ligadas</div></div>
-  </div>
-  <div class="grid g2">
-    <div class="card"><h3>Realizado x Meta por vendedora · ${perTxt}</h3><div class="chartbox"><canvas id="ch1"></canvas></div></div>
-    <div class="card"><h3>Evolução acumulada no mês · ${MESES[Number(comp.slice(5))-1]}/${comp.slice(0,4)}</h3><div class="chartbox"><canvas id="ch2"></canvas></div></div>
-    <div class="card"><h3>Resultado das ligações · ${perTxt}</h3><div class="chartbox"><canvas id="ch3"></canvas></div></div>
-    <div class="card"><h3>Follow-ups por vendedora</h3><div class="chartbox"><canvas id="ch4"></canvas></div></div>
-  </div>
-  <div class="card" style="margin-top:14px"><h3 style="flex-wrap:wrap">Clientes novos por mês · ${anoN}
-      <select style="margin-left:auto;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-weight:600" onchange="st.painel.anoNovos=Number(this.value);pgPainel()">${[anoAt-2,anoAt-1,anoAt,anoAt+1].map(y=>`<option ${anoN===y?'selected':''}>${y}</option>`).join('')}</select></h3>
-    <div class="chartbox"><canvas id="ch5"></canvas></div><div class="small muted" style="margin-top:6px">Conta os clientes pela data do cadastro, por loja. O ano deste gráfico é independente dos filtros do painel.</div></div>
-  <div class="card" style="margin-top:14px"><h3>Ranking de vendedoras — ${perTxt}</h3>
-  <div class="tbl-wrap" style="border:0"><table><thead><tr><th>#</th><th>Vendedora</th><th>Empresa</th><th class="num">Meta${dia?' do dia':''}</th><th class="num">Meta/dia</th><th class="num">Hoje</th><th class="num">Realizado</th><th>Atingimento</th><th class="num">Ritmo esperado</th><th>Situação</th><th class="num">Efetivos</th><th class="num">Follow-ups atrasados</th></tr></thead><tbody>
-  ${ord.map((x,k)=>{ const pp = pct(x.real,x.meta); const sit = !x.meta ? '<span class="tag">Sem meta</span>' : pp>=100 ? '<span class="tag ok">Meta batida</span>' : x.real>=x.esperado ? '<span class="tag info">No ritmo</span>' : '<span class="tag bad">Abaixo do ritmo</span>';
-    return `<tr><td>${k+1}</td><td><b>${esc(x.v.nome)}</b></td><td>${empTag(x.v.empresa_id)}</td><td class="num">${fmtDec(x.meta)}</td><td class="num">${fmtDec(x.metaDia)}</td><td class="num">${mesCorr && !domingo ? `<span class="tag ${x.hj>=x.metaDia&&x.metaDia>0?'ok':''}">${fmtN(x.hj)}</span>` : '<span class="muted">—</span>'}</td><td class="num"><b>${fmtN(x.real)}</b></td>
-    <td><div style="display:flex;gap:8px;align-items:center"><div class="prog ${pp>=100?'ok':''}" style="flex:1"><div style="width:${Math.min(pp,100)}%"></div></div><b>${pp}%</b></div></td>
-    <td class="num">${fmtDec(x.esperado)}</td><td>${sit}</td><td class="num">${fmtN(x.efet)}</td><td class="num">${x.fuAtr?`<span class="tag bad">${x.fuAtr}</span>`:'0'}</td></tr>`; }).join('') || '<tr><td colspan="12" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
-  </tbody></table></div></div>`;
 
-  st.pdfPainel = { comp, dia, perTxt, T, pm, novosMes, duAte, duTot, mesCorr, domingo, anivN: anivDoDia(h).length, anivLig: anivDoDia(h).filter(c=>ligouHoje(c.id)).length, linhas: ord, anoN };
+  <div class="pn-top">
+    <div class="card pn-hero">
+      <div class="ring" style="--p:${ring};--c:${ringCor}"><div><b>${pm}%</b><span>da meta</span></div></div>
+      <div class="hx">
+        <div class="small muted">Ligações ${perDoTxt} · ${perTxt}</div>
+        <div class="big">${fmtN(T.real)} <span>/ ${fmtDec(T.meta)}</span></div>
+        <span class="tag ${sitT[0]}">${sitT[1]}</span>
+        <div class="hl">${dia ? '' : `<div><span>Ritmo esperado hoje</span><b>${fmtN(T.esp)}</b></div>`}${projT !== null ? `<div><span>Projeção do mês</span><b class="${T.metaMes && projT >= T.metaMes ? 'cok' : 'cbad'}">${fmtN(projT)}</b></div>` : ''}<div><span>Meta diária</span><b>${fmtDec(T.md)}</b></div></div>
+      </div>
+    </div>
+    <div class="pn-mk">
+      ${mini('Ligações hoje', hojeAtivo ? `${fmtN(T.hj)}<small> / ${fmtN(metaHoje)}</small>` : '—', hojeAtivo ? (metaHoje && !faltaHoje ? '✔ meta do dia batida' : `faltam ${fmtN(faltaHoje)} para a meta do dia`) : (domingo && mesCorr ? 'Domingo: sem meta' : 'fora do mês atual'), hojeAtivo && metaHoje ? (faltaHoje ? 'warn' : 'ok') : '')}
+      ${mini('Contato efetivo', pct(T.efet,T.real)+'%', `${fmtN(T.efet)} de ${fmtN(T.real)} atendidas`, pct(T.efet,T.real) >= 30 ? 'ok' : T.real ? 'warn' : '')}
+      ${mini('Tempo em ligação', fmtDur(T.dur), 'média '+fmtDur(T.real?T.dur/T.real:0)+' por ligação', '')}
+      ${mini('Follow-ups atrasados', fmtN(T.atr), fmtN(T.pend)+' pendentes a partir de hoje', T.atr ? 'bad' : 'ok', "st.plan.filtro='atrasados';st.plan.view='lista';ir('planejamento')")}
+      ${mini('Clientes novos', fmtN(novosMes), 'cadastrados '+perDoTxt, '')}
+      ${mini('Aniversariantes hoje', anivH.length, `${anivH.length - anivPend} já ligadas`, anivPend ? 'warn' : '', "st.aniv.tab='hoje';ir('aniversariantes')")}
+    </div>
+  </div>
+
+  <div class="pn-mid">
+    <div class="card"><h3>⚡ Ações prioritárias</h3><div class="acoes">${acoes.map(a=>a.html).join('')}</div></div>
+    <div class="card"><h3>Ritmo do mês · ${mesTxt}<span class="lg"><i style="background:#F2701A"></i>Acumulado <i style="background:#3B4A5A"></i>Meta (ritmo) <i style="background:#FDBA74"></i>Por dia</span></h3><div class="chartbox sm"><canvas id="ch2"></canvas></div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px"><h3>Desempenho por vendedora · ${perTxt}<span class="lg">barra = realizado · <i class="mkr"></i> = onde deveria estar hoje</span></h3>
+  <div class="tbl-wrap" style="border:0"><table class="pn-tbl"><thead><tr><th>#</th><th>Vendedora</th><th style="min-width:220px">Realizado x meta</th><th class="num">Hoje</th>${dia?'':'<th class="num">Projeção</th>'}<th class="num">Contato</th><th>Follow-ups</th><th>Situação</th><th></th></tr></thead><tbody>
+  ${ord.map((x,k) => { const esc0 = x.meta ? Math.min(100, x.esperado / x.meta * 100) : 0;
+    return `<tr><td class="muted">${['🥇','🥈','🥉'][k] || k+1}</td><td><b>${esc(x.v.nome)}</b>${curEmp()?'':' '+empTag(x.v.empresa_id)}</td>
+    <td><div class="bul"><div class="bar"><div class="fill ${x.sit}" style="width:${Math.min(x.pp,100)}%"></div>${!dia && x.meta ? `<i style="left:${esc0}%"></i>` : ''}</div><span><b>${fmtN(x.real)}</b>/${fmtDec(x.meta)} · ${x.pp}%</span></div></td>
+    <td class="num">${hojeAtivo && x.metaDia ? `<span class="tag ${x.falta ? (x.hj ? 'warn' : 'bad') : 'ok'}">${x.hj}/${Math.ceil(x.metaDia)}</span>` : '<span class="muted">—</span>'}</td>
+    ${dia ? '' : `<td class="num ${x.meta && x.proj < x.metaMes ? 'cbad' : 'cok'}"><b>${fmtN(x.proj)}</b></td>`}
+    <td class="num">${x.real ? x.cont+'%' : '—'}</td>
+    <td class="small"><span title="Concluídos">✔ ${x.fuOk}</span> · <span title="Pendentes">⏳ ${x.fuPend}</span>${x.fuAtr ? ` · <span class="tag bad" title="Atrasados">⚠ ${x.fuAtr}</span>` : ''}</td>
+    <td>${SIT[x.sit]}</td>
+    <td class="act"><button class="btn sec sm" title="Planejar ligações para ${esc(x.v.nome)}" onclick="st.pl.vend='${x.v.id}';st.pl.sel=new Set();ir('planejar')">📋 Planejar</button></td></tr>`; }).join('') || '<tr><td colspan="9" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
+  </tbody></table></div></div>
+
+  <div class="pn-bot">
+    <div class="card"><h3>Resultado das ligações · ${perTxt}</h3>
+      ${rcTot ? `<div class="rbars">${RESULTADOS.map((r,i) => `<div class="rb"><span>${r}</span><div class="bar"><div style="width:${pct(rc[i],rcTot)}%;background:${['#16A34A','#2563EB','#F59E0B','#9CA3AF','#6B7280','#DC2626'][i]}"></div></div><b>${fmtN(rc[i])}</b><em>${pct(rc[i],rcTot)}%</em></div>`).join('')}</div>` : '<div class="empty">Nenhuma ligação no período.</div>'}</div>
+    <div class="card"><h3 style="flex-wrap:wrap">Clientes novos por mês · ${anoN}
+      <select style="margin-left:auto;padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-weight:600;background:var(--card);color:var(--tx)" onchange="st.painel.anoNovos=Number(this.value);pgPainel()">${[anoAt-2,anoAt-1,anoAt,anoAt+1].map(y=>`<option ${anoN===y?'selected':''}>${y}</option>`).join('')}</select></h3>
+      <div class="chartbox sm"><canvas id="ch5"></canvas></div></div>
+  </div>`;
+
+  st.pdfPainel = { comp, dia, perTxt, T, pm, novosMes, duAte, duTot, mesCorr, domingo, anivN: anivH.length, anivLig: anivH.length - anivPend, linhas: ord, anoN };
   if(typeof Chart === 'undefined') return;
   if(!Chart.registry.plugins.get('rotulos')) Chart.register(rotulosPlugin);
-  Chart.defaults.font.family = "'Segoe UI',system-ui,Arial,sans-serif";
+  Chart.defaults.font.family = "'Segoe UI',system-ui,Arial,sans-serif"; Chart.defaults.font.size = 11;
   Chart.defaults.color = corTema('--mut','#6B7280'); Chart.defaults.borderColor = corTema('--line','#E5E7EB');
-  const cor = x => CORES[db.vendedoras.indexOf(x.v) % CORES.length], pad20 = { padding:{ top:20 } };
-  st.charts.push(new Chart($('ch1'), { type:'bar', data:{ labels: linhas.map(x=>x.v.nome), datasets:[
-      { label:'Realizado', data: linhas.map(x=>x.real), backgroundColor:'#F2701A', borderRadius:6 },
-      { label:'Meta', data: linhas.map(x=>Math.round(x.meta*10)/10), backgroundColor:'#3B4A5A', borderRadius:6 } ] },
-    options:{ maintainAspectRatio:false, layout:pad20, plugins:{ rotulos:ROT, tooltip:{ callbacks:{ afterBody: it => { const x = linhas[it[0].dataIndex]; return 'Atingimento: '+pct(x.real,x.meta)+'%'; } } } }, scales:{ y:{ beginAtZero:true, grace:'8%' } } } }));
 
-  const labels = [], dsReal = [], dsMeta = [];
-  for(let d=1; d<=nd; d++){ const iso = comp+'-'+pad(d); labels.push(pad(d)); dsMeta.push(duTot ? Math.round(T.metaMes*diasUteis(comp, iso)/duTot) : 0); dsReal.push(iso > h ? null : ligsMes.filter(l => dataDeTs(l.inicio) <= iso).length); }
-  const porVend = linhas.length > 1 && linhas.length <= 8 ? linhas.map(x => ({ label:x.v.nome, data: labels.map((_,i) => { const iso = comp+'-'+pad(i+1); return iso>h ? null : ligsMes.filter(l => l.vendedora_id===x.v.id && dataDeTs(l.inicio) <= iso).length; }), borderColor:cor(x), backgroundColor:cor(x), borderWidth:1.5, pointRadius:0, tension:.2, borderDash:[4,3] })) : [];
-  st.charts.push(new Chart($('ch2'), { type:'line', data:{ labels, datasets:[
-      { label:'Realizado (total)', data: dsReal, borderColor:'#F2701A', backgroundColor:'rgba(242,112,26,.12)', fill:true, tension:.2, pointRadius:0, borderWidth:3 },
-      { label:'Meta (ritmo)', data: dsMeta, borderColor:'#3B4A5A', borderDash:[6,4], pointRadius:0, borderWidth:2 }, ...porVend ] },
-    options:{ maintainAspectRatio:false, layout:pad20, interaction:{ mode:'index', intersect:false }, scales:{ y:{ beginAtZero:true } }, plugins:{ rotulos:{ on:true, fmt:fmtN, max:2 }, legend:{ labels:{ boxWidth:12 } } } } }));
-
-  const rc = RESULTADOS.map(r => ligs.filter(l => l.resultado === r).length);
-  st.charts.push(new Chart($('ch3'), { type:'doughnut', data:{ labels: RESULTADOS.map((r,i) => r+' ('+rc[i]+')'), datasets:[{ data: rc, backgroundColor:['#16A34A','#2563EB','#F59E0B','#9CA3AF','#6B7280','#DC2626'] }] },
-    options:{ maintainAspectRatio:false, plugins:{ rotulos:ROT, legend:{ position:'right', labels:{ boxWidth:12 } } } } }));
-
-  st.charts.push(new Chart($('ch4'), { type:'bar', data:{ labels: linhas.map(x=>x.v.nome), datasets:[
-      { label: dia ? 'Concluídos no dia' : 'Concluídos no mês', data: linhas.map(x=>x.fuOk), backgroundColor:'#16A34A', borderRadius:4 },
-      { label:'Pendentes', data: linhas.map(x=>x.fuPend), backgroundColor:'#F59E0B', borderRadius:4 },
-      { label:'Atrasados', data: linhas.map(x=>x.fuAtr), backgroundColor:'#DC2626', borderRadius:4 } ] },
-    options:{ maintainAspectRatio:false, plugins:{ rotulos:ROT }, scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } } } }));
+  /* Ritmo do mês: barras = ligações por dia; linhas = acumulado x meta no ritmo */
+  const labels = [], dsReal = [], dsMeta = [], dsDia = [];
+  for(let d=1; d<=nd; d++){ const iso = comp+'-'+pad(d); labels.push(pad(d));
+    dsMeta.push(duTot ? Math.round(T.metaMes*diasUteis(comp, iso)/duTot) : 0);
+    dsReal.push(iso > h ? null : ligsMes.filter(l => dataDeTs(l.inicio) <= iso).length);
+    dsDia.push(iso > h ? null : ligsMes.filter(l => dataDeTs(l.inicio) === iso).length); }
+  st.charts.push(new Chart($('ch2'), { data:{ labels, datasets:[
+      { type:'line', label:'Acumulado', data: dsReal, borderColor:'#F2701A', backgroundColor:'rgba(242,112,26,.10)', fill:true, tension:.25, pointRadius:0, borderWidth:2.5, yAxisID:'y', order:1 },
+      { type:'line', label:'Meta (ritmo)', data: dsMeta, borderColor:'#3B4A5A', borderDash:[5,4], pointRadius:0, borderWidth:1.5, yAxisID:'y', order:2 },
+      { type:'bar', label:'Ligações no dia', data: dsDia, backgroundColor: labels.map((_,i) => comp+'-'+pad(i+1) === dia ? '#C1662E' : '#FDBA74'), borderRadius:3, maxBarThickness:14, yAxisID:'y2', order:3 } ] },
+    options:{ maintainAspectRatio:false, interaction:{ mode:'index', intersect:false }, plugins:{ legend:{ display:false }, rotulos:{ on:true, fmt:fmtN, max:2 } },
+      scales:{ x:{ grid:{ display:false }, ticks:{ maxRotation:0, autoSkip:true, maxTicksLimit:16 } }, y:{ beginAtZero:true, grace:'10%', ticks:{ precision:0 } }, y2:{ position:'right', beginAtZero:true, grid:{ display:false }, ticks:{ precision:0 }, suggestedMax: Math.max(4, ...dsDia.filter(v=>v!==null)) * 2.2 } } } }));
 
   /* Clientes novos por mês: ano próprio, jan a dez, lojas lado a lado */
   const empsN = db.empresas.filter(e => e.ativo && (isAdmin() || minhasEmps().includes(e.id)));
   const baseN = db.clientes.filter(c => c.data_cadastro && c.data_cadastro.slice(0,4) === String(anoN) && clsOk(c.id, p.cls));
-  st.charts.push(new Chart($('ch5'), { type:'bar', data:{ labels: MESES.map(m => m.slice(0,3)+'/'+String(anoN).slice(2)), datasets: empsN.map(e => ({ label:e.nome, backgroundColor:e.cor||'#F2701A', borderRadius:4, maxBarThickness:34,
+  st.charts.push(new Chart($('ch5'), { type:'bar', data:{ labels: MESES.map(m => m.slice(0,3)), datasets: empsN.map(e => ({ label:e.nome, backgroundColor:e.cor||'#F2701A', borderRadius:3, maxBarThickness:22,
       data: MESES.map((_,i) => baseN.filter(c => c.empresa_id === e.id && c.data_cadastro.slice(5,7) === pad(i+1)).length) })) },
-    options:{ maintainAspectRatio:false, layout:pad20, plugins:{ rotulos:{ on:true, fmt:fmtN } }, scales:{ y:{ beginAtZero:true, grace:'10%', ticks:{ precision:0 } } } } }));
+    options:{ maintainAspectRatio:false, layout:{ padding:{ top:16 } }, plugins:{ rotulos:{ on:true, fmt:fmtN }, legend:{ display: empsN.length > 1, labels:{ boxWidth:10 } } }, scales:{ x:{ grid:{ display:false } }, y:{ beginAtZero:true, grace:'10%', ticks:{ precision:0 } } } } }));
 }
 
 /* ============================ PLANEJAMENTO (FOLLOW-UP) ============================ */
