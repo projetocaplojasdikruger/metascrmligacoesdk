@@ -227,6 +227,17 @@ tr.hl td{background:#FFF1E5!important;animation:hl 2.5s ease}
 .pl-tel input.salvo{border-color:var(--ok);background:#F0FDF4}
 @media(max-width:700px){.pl-tel{justify-content:flex-end}}
 .pl-bar{position:sticky;bottom:10px;z-index:20;background:var(--card);border:1px solid var(--line);border-top:3px solid var(--or);border-radius:12px;padding:10px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px;box-shadow:0 -4px 16px rgba(0,0,0,.10)}
+.pl-steps{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.pl-step{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:20px;background:var(--card);border:1px solid var(--line);color:var(--mut);font-size:13px;font-weight:600}
+.pl-step b{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--line);color:var(--mut);font-size:11px}
+.pl-step.on{border-color:var(--or);color:var(--or2)} .pl-step.on b{background:var(--or);color:#fff}
+.pl-step.done{color:#166534} .pl-step.done b{background:#16A34A;color:#fff}
+.pl-arrow{color:var(--mut)}
+.pl-vends{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.pl-vend{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:12px 14px;border:2px solid var(--line);border-radius:12px;background:var(--card);color:var(--tx);cursor:pointer;font:inherit}
+.pl-vend:hover{border-color:#FDBA74}
+.pl-vend.on{border-color:var(--or);background:var(--orl)}
+.pl-vend .small{color:var(--mut)}
 .pl-bar #plCnt{font-weight:700;font-size:15px}
 .pl-bar .btn{margin-left:auto}
 @media(max-width:900px){.form.f4{grid-template-columns:repeat(2,minmax(0,1fr))}.pl-bar{bottom:calc(66px + env(safe-area-inset-bottom,0px))}}
@@ -546,13 +557,27 @@ function vincDe(uid){
   if(u && u.vendedora_id) s.add(Number(u.vendedora_id));
   return [...s];
 }
-const minhas = () => db.me ? vincDe(db.me.id) : [];
+/* LOGIN DE CAIXA = login (não admin) com a tela "Vendedoras" liberada em Permissões.
+   O caixa enxerga TODAS as vendedoras das empresas às quais está vinculado
+   (ex.: caixadk@gmail.com → todas da DK; caixakf@gmail.com → todas da KF) — e só delas. */
+const vincProprios = () => db.me ? vincDe(db.me.id) : [];
+const isCaixa = () => !isAdmin() && !!db.me && Array.isArray(db.me.telas) && db.me.telas.includes('vendedoras');
+const empsDoLogin = () => [...new Set(vincProprios().map(x => (M.vend[x]||{}).empresa_id).filter(Boolean))];
+const minhas = () => {
+  const p = vincProprios(); if(!isCaixa()) return p;
+  const es = empsDoLogin(); return [...new Set([...p, ...db.vendedoras.filter(v => es.includes(v.empresa_id)).map(v => v.id)])];
+};
+function avisoCaixa(){
+  if(!isCaixa() || minhas().length > vincProprios().length) return '';
+  return `<div class="box-info" style="margin:0 0 14px;border-color:#FDBA74;background:var(--orl)">⚠️ <b>Login de caixa:</b> só ${minhas().length === 1 ? 'a vendedora do próprio caixa foi carregada' : 'as vendedoras do seu login foram carregadas'}. Se a ${esc(minhasEmps().map(empNome).join(' / '))} tem outras vendedoras, peça ao administrador para executar o arquivo <b>10_caixa_ve_empresa.sql</b> no Supabase e clique em ↻.</div>`;
+}
+const perfilTxt = () => isAdmin() ? 'Administrador' : ((isCaixa() ? 'Caixa' : minhas().length > 1 ? minhas().length+' vendedoras' : 'Vendedora') + ' · ' + minhasEmps().map(empNome).join(' / '));
 const verVendFiltro = () => isAdmin() || minhas().length > 1;
 const minhaVend = () => { const l = minhas(); return l.length ? M.vend[l[0]] : null; };
 const minhasEmps = () => [...new Set(minhas().map(x => (M.vend[x]||{}).empresa_id).filter(Boolean))];
 function curEmp(){ if(isAdmin()) return st.emp ? Number(st.emp) : null; const e = minhasEmps(); return e.length === 1 ? e[0] : (st.emp ? Number(st.emp) : null); }
 const empOk = id => { const e = curEmp(); if(e) return e === id; return isAdmin() || minhasEmps().includes(id); };
-function vendsVisiveis(soAtivas){ let l = db.vendedoras.filter(v => empOk(v.empresa_id)); if(!isAdmin()){ const mv = minhas(); l = l.filter(v => mv.includes(v.id)); } if(soAtivas) l = l.filter(v => v.ativa); return l.sort((a,b)=>a.nome.localeCompare(b.nome)); }
+function vendsVisiveis(soAtivas){ let l = db.vendedoras.filter(v => empOk(v.empresa_id)); if(!isAdmin()){ const mv = new Set(minhas()); l = l.filter(v => mv.has(v.id)); } if(soAtivas) l = l.filter(v => v.ativa); return l.sort((a,b)=>a.nome.localeCompare(b.nome)); }
 function metaDe(vid, comp){ const m = db.metas.find(x => x.vendedora_id===vid && x.competencia===comp); if(m) return m.meta_ligacoes; const v = M.vend[vid]; return v ? (v.meta_mensal_padrao||0) : 0; }
 const empNome = id => (M.emp[id]||{}).nome || '';
 const empTag = id => { const e = M.emp[id]; return e ? `<span class="tag" style="background:${e.cor}22;color:${e.cor}">${esc(e.nome)}</span>` : ''; };
@@ -669,7 +694,7 @@ async function boot(){
     if(me.perfil !== 'admin' && !minhas().length){ bloqueado('Seu acesso foi criado, mas ainda não está vinculado a uma vendedora. Peça ao administrador para concluir a liberação.'); return; }
     await carregarDados();
     $('uNome').textContent = me.nome || me.email;
-    $('uPerfil').textContent = isAdmin() ? 'Administrador' : ((minhas().length > 1 ? minhas().length+' vendedoras' : 'Vendedora') + ' · ' + minhasEmps().map(empNome).join(' / '));
+    $('uPerfil').textContent = perfilTxt();
     montarEmpSel(); montarNav(); ir(st.page);
     if(!st.avisoAniv && pode('aniversariantes')){ st.avisoAniv = true; avisoAniversariantes(); }
   }catch(e){ toast(e.message, 'err'); if(!S) mostrarLogin(e.message); }
@@ -763,9 +788,9 @@ function anivDataFU(f){
   return best;
 }
 const anivExpirado = f => f.status === 'pendente' && f.motivo === 'Aniversário' && addDias(anivDataFU(f), 2) < hoje();
-function fuVisiveis(){ return db.followups.filter(f => empOk(f.empresa_id) && (isAdmin() || minhas().includes(f.vendedora_id)) && !anivExpirado(f)); }
+function fuVisiveis(){ const adm = isAdmin(), mv = new Set(minhas()); return db.followups.filter(f => empOk(f.empresa_id) && (adm || mv.has(f.vendedora_id)) && !anivExpirado(f)); }
 const anivTag = c => c && c.data_nascimento ? `<span class="tag warn" title="Data de aniversário">🎂 ${fmtDM(c.data_nascimento)}</span>` : '';
-function ligVisiveis(){ return db.ligacoes.filter(l => empOk(l.empresa_id) && (isAdmin() || minhas().includes(l.vendedora_id))); }
+function ligVisiveis(){ const adm = isAdmin(), mv = new Set(minhas()); return db.ligacoes.filter(l => empOk(l.empresa_id) && (adm || mv.has(l.vendedora_id))); }
 function cliVisiveis(){ return db.clientes.filter(c => empOk(c.empresa_id)); }
 function vendOptions(sel, todasLabel, empId){
   let l = vendsVisiveis(); if(empId) l = l.filter(v => v.empresa_id === Number(empId));
@@ -964,7 +989,7 @@ function pgPainel(){
   const anoN = p.anoNovos || anoAt, anos = []; for(let y = Math.min(anoAt-2, Number(comp.slice(0,4))); y <= anoAt+1; y++) anos.push(y);
   const perDoTxt = dia ? 'no dia' : 'no mês';
 
-  $('content').innerHTML = `
+  $('content').innerHTML = avisoCaixa() + `
   <div class="filters">
     <div class="f"><label>Dia</label><select onchange="st.painel.dia=this.value;pgPainel()"><option value="">Todos</option>${Array.from({length:nd},(_,i)=>i+1).map(d=>`<option value="${d}" ${String(p.dia)===String(d)?'selected':''}>${pad(d)}</option>`).join('')}</select></div>
     <div class="f"><label>Mês</label><select onchange="st.painel.comp=(st.painel.comp||mesAtual()).slice(0,4)+'-'+this.value;pgPainel()">${MESES.map((m,i)=>`<option value="${pad(i+1)}" ${comp.slice(5)===pad(i+1)?'selected':''}>${m}</option>`).join('')}</select></div>
@@ -1107,19 +1132,27 @@ function ehAniv(c, iso){
   return md === alvo || (!bis && md === '02-29' && alvo === '02-28');
 }
 function pgPlanejar(){
-  const p = st.pl, vs = vendsVisiveis(true);
+  const p = st.pl, vs = vendsVisiveis(true), h = hoje();
   if(p.vend && !vs.some(x => String(x.id) === String(p.vend))){ p.vend = ''; p.sel = new Set(); }
   if(!p.vend && vs.length === 1) p.vend = String(vs[0].id);
   const v = p.vend ? M.vend[Number(p.vend)] : null;
-  let html = `<div class="card" style="margin-bottom:14px"><h3>1. O que agendar</h3><div class="form f4">
-    <div><label>Vendedora *</label><select onchange="st.pl.vend=this.value;st.pl.sel=new Set();pgPlanejar()" ${vs.length===1?'disabled':''}>${vendOptions(p.vend,'Selecione…')}</select></div>
-    <div><label>Data da ligação *</label><input type="date" value="${p.data}" onchange="st.pl.data=this.value||hoje();pgPlanejar()"></div>
+  const pendDe = id => db.followups.filter(f => f.vendedora_id === id && f.status === 'pendente' && !anivExpirado(f));
+  const passo = (n, tit, on, done) => `<span class="pl-step ${on?'on':''} ${done?'done':''}"><b>${done?'✓':n}</b>${tit}</span>`;
+  let html = avisoCaixa() + `<div class="pl-steps">${passo(1,'Vendedora',!v,!!v)}<span class="pl-arrow">›</span>${passo(2,'Data e motivo',!!v,!!v && !!p.data)}<span class="pl-arrow">›</span>${passo(3,'Marque os clientes',!!v,p.sel.size>0)}<span class="pl-arrow">›</span>${passo(4,'Criar follow-ups',p.sel.size>0,false)}</div>
+  <div class="card" style="margin-bottom:14px"><h3>1. Para qual vendedora?</h3>
+    ${vs.length ? `<div class="pl-vends">${vs.map(x => { const pe = pendDe(x.id), hj = pe.filter(f => f.data_prevista === h).length, atr = pe.filter(f => f.data_prevista < h).length;
+      return `<button class="pl-vend ${String(x.id)===String(p.vend)?'on':''}" onclick="plEscolherVend(${x.id})"><b>${esc(x.nome)}</b>${curEmp()?'':' '+empTag(x.empresa_id)}<span class="small">${hj} hoje · ${pe.length} pendente(s)${atr?` · <span style="color:var(--bad)">${atr} atrasado(s)</span>`:''}</span></button>`; }).join('')}</div>`
+      : '<div class="muted">Nenhuma vendedora ativa disponível para o seu login.</div>'}
+  </div>`;
+  if(!v){ $('content').innerHTML = html + '<div class="card empty">👆 Clique na vendedora para quem você vai agendar as ligações.</div>'; return; }
+  const btnD = (d, t) => `<button class="btn ${p.data===d?'':'sec'} sm" onclick="st.pl.data='${d}';pgPlanejar()">${t}</button>`;
+  html += `<div class="card" style="margin-bottom:14px"><h3>2. Quando e por quê · ${esc(v.nome)}</h3><div class="form f4">
+    <div><label>Data da ligação *</label><input type="date" value="${p.data}" onchange="st.pl.data=this.value||hoje();pgPlanejar()"><div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${btnD(h,'Hoje')}${btnD(addDias(h,1),'Amanhã')}${btnD(addDias(h,2),nomeDia(addDias(h,2)).slice(0,3))}</div></div>
     <div><label>Hora (opcional)</label><input type="time" value="${p.hora}" onchange="st.pl.hora=this.value"></div>
     <div><label>Motivo</label><select onchange="st.pl.motivo=this.value">${MOTIVOS.map(m=>`<option ${p.motivo===m?'selected':''}>${m}</option>`).join('')}</select></div>
-    <div class="full"><label>Descrição / o que falar</label><input value="${esc(p.desc)}" oninput="st.pl.desc=this.value" placeholder="Vale para todos os clientes marcados"></div>
-    <div class="full"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin:0"><input type="checkbox" style="width:18px;height:18px;accent-color:var(--or)" ${p.anivMot?'checked':''} onchange="st.pl.anivMot=this.checked"> Aniversariantes da data entram com o motivo "Aniversário"</label></div>
+    <div><label>&nbsp;</label><label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin:0;font-weight:400;color:var(--tx)"><input type="checkbox" style="width:18px;height:18px;accent-color:var(--or)" ${p.anivMot?'checked':''} onchange="st.pl.anivMot=this.checked"> Aniversariantes entram com motivo "Aniversário"</label></div>
+    <div class="full"><label>Descrição / o que falar (opcional)</label><input value="${esc(p.desc)}" oninput="st.pl.desc=this.value" placeholder="Vale para todos os clientes marcados"></div>
   </div></div>`;
-  if(!v){ $('content').innerHTML = html + '<div class="card empty">Selecione a vendedora para listar os clientes da empresa dela.</div>'; return; }
   const q = p.q.trim().toLowerCase(), qd = q.replace(/\D/g,''), nome = (a,b) => a.nome.localeCompare(b.nome);
   const cl = db.clientes.filter(c => c.ativo && c.empresa_id === v.empresa_id && clsOk(c.id, p.cls)
     && (!p.cart || (p.cart === 'dela' ? c.vendedora_id === v.id : !c.vendedora_id))
@@ -1140,18 +1173,20 @@ function pgPlanejar(){
   const secao = (tit, cls, ids, linhas, obs) => `<div class="dayhead ${cls}">${tit} <span class="tag">${ids.length}</span>
       ${ids.length?`<button class="btn sec sm" onclick="plMarcarVarios([${ids.join(',')}],true)">Marcar todos</button><button class="btn sec sm" onclick="plMarcarVarios([${ids.join(',')}],false)">Desmarcar</button>`:''}</div>
     <div class="tbl-wrap"><table><thead><tr><th></th><th>Cliente</th><th>Celular / Telefone</th><th>Nascimento</th><th>Última ligação</th><th>Carteira</th></tr></thead><tbody>${linhas || '<tr><td colspan="6" class="empty">Nenhum cliente.</td></tr>'}</tbody></table></div>${obs||''}`;
-  html += `<div class="card"><h3>2. Escolha os clientes · ${esc(empNome(v.empresa_id))}</h3>
+  html += `<div class="card"><h3>3. Marque os clientes · ${esc(empNome(v.empresa_id))}</h3>
+    <p class="small muted" style="margin:-4px 0 10px">Os aniversariantes aparecem primeiro. Clientes com 📅 vermelho já estão agendados com outra vendedora (clique no ✕ para liberar).</p>
     <div class="filters">
       <div class="f grow"><label>Buscar</label><input id="plQ" value="${esc(p.q)}" placeholder="Nome ou telefone" oninput="st.pl.q=this.value;clearTimeout(window._plq);window._plq=setTimeout(()=>{pgPlanejar();const i=$('plQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)},300)"></div>
       ${clsFiltro(p.cls, "st.pl.cls=this.value;pgPlanejar()")}
       <div class="f"><label>Carteira</label><select onchange="st.pl.cart=this.value;pgPlanejar()"><option value="">Todas</option><option value="dela" ${p.cart==='dela'?'selected':''}>Da vendedora</option><option value="sem" ${p.cart==='sem'?'selected':''}>Sem carteira</option></select></div>
       <button class="btn sec" onclick="plMarcarVarios([],false,true)">Limpar seleção</button>
     </div>
-    ${secao(`🎂 Aniversariantes em ${nomeDia(p.data)} ${fmtD(p.data)}`, 'today', s1.map(c => c.id), s1.map(c => row(c, `<span class="tag or">faz ${idadeEm(c, p.data)} anos</span>`)).join(''))}
-    ${secao('🎂 Aniversariantes nos 7 dias seguintes', '', s2.map(x => x.c.id), s2.map(x => row(x.c, `<span class="tag">${nomeDia(x.d).slice(0,3)} ${fmtDM(x.d)}</span>`)).join(''))}
-    ${secao('Demais clientes', '', s3.map(c => c.id), s3.map(c => row(c)).join(''), s3all.length > lim ? `<p class="muted small">Exibindo ${lim} de ${fmtN(s3all.length)}. Use a busca, a classificação ou a carteira para achar os demais.</p>` : '')}
+    ${s1.length ? secao(`🎂 Aniversariantes em ${nomeDia(p.data)} ${fmtD(p.data)}`, 'today', s1.map(c => c.id), s1.map(c => row(c, `<span class="tag or">faz ${idadeEm(c, p.data)} anos</span>`)).join('')) : ''}
+    ${s2.length ? secao('🎂 Aniversariantes nos 7 dias seguintes', '', s2.map(x => x.c.id), s2.map(x => row(x.c, `<span class="tag">${nomeDia(x.d).slice(0,3)} ${fmtDM(x.d)}</span>`)).join('')) : ''}
+    ${s3all.length ? secao(s1.length || s2.length ? 'Demais clientes' : 'Clientes', '', s3.map(c => c.id), s3.map(c => row(c)).join(''), s3all.length > lim ? `<p class="muted small">Exibindo ${lim} de ${fmtN(s3all.length)}. Use a busca, a classificação ou a carteira para achar os demais.</p>` : '') : ''}
+    ${!s1.length && !s2.length && !s3all.length ? '<div class="empty">Nenhum cliente encontrado com esses filtros.</div>' : ''}
   </div>
-  <div class="pl-bar"><span id="plCnt"></span><span class="small muted" id="plInfo"></span><button class="btn" id="plOk" onclick="plCriar()">Criar follow-ups</button></div>`;
+  <div class="pl-bar"><span id="plCnt"></span><span class="small muted" id="plInfo"></span><button class="btn" id="plOk" onclick="plCriar()">4. Criar follow-ups</button></div>`;
   $('content').innerHTML = html; plAtualizar();
 }
 async function plSalvarTel(id, campo, el){
@@ -1169,8 +1204,10 @@ function plAtualizar(){
   const nAniv = [...p.sel].filter(id => M.cli[id] && ehAniv(M.cli[id], p.data)).length;
   $('plCnt').textContent = `${fmtN(n)} cliente(s) marcado(s)`;
   $('plInfo').textContent = n && v ? `para ${v.nome} em ${fmtD(p.data)}${nAniv?` · ${nAniv} aniversariante(s)`:''}` : '';
-  $('plOk').disabled = !n; $('plOk').textContent = n ? `Criar ${fmtN(n)} follow-up(s)` : 'Criar follow-ups';
+  $('plOk').disabled = !n; $('plOk').textContent = n ? `✓ Criar ${fmtN(n)} follow-up(s)` : 'Marque os clientes acima';
+  document.querySelectorAll('.pl-step').forEach((e,i) => { if(i === 2) e.classList.toggle('done', n > 0); if(i === 3) e.classList.toggle('on', n > 0); });
 }
+function plEscolherVend(id){ if(String(st.pl.vend) !== String(id)){ st.pl.vend = String(id); st.pl.sel = new Set(); } pgPlanejar(); }
 function plMarcar(id, on){ if(on) st.pl.sel.add(id); else st.pl.sel.delete(id); plAtualizar(); }
 async function plDesmarcarFU(fid){
   const f = db.followups.find(x => x.id === fid); if(!f) return;
@@ -1646,7 +1683,7 @@ function historicoCli(id){
 function pgVend(){
   const comp = mesAtual(), l = vendsVisiveis();
   const usus = vid => db.usuarios.filter(u => u.perfil !== 'admin' && vincDe(u.id).includes(vid));
-  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">${isAdmin() ? 'Cada vendedora fica vinculada a uma empresa e a um ou mais logins (🔗). Um login pode ter várias vendedoras, de qualquer empresa (ex.: login do caixa), e vê só essas empresas e os números delas. A meta mensal padrão vale para os meses sem meta específica.' : 'Vendedoras vinculadas ao seu login. Ao cadastrar uma nova (em qualquer empresa), ela já fica vinculada ao seu acesso. As metas são definidas pelo administrador.'}</div><button class="btn sec" onclick="pdfVend()">📄 Gerar PDF</button><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
+  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">${isAdmin() ? 'Cada vendedora fica vinculada a uma empresa e a um ou mais logins (🔗). Um login pode ter várias vendedoras, de qualquer empresa (ex.: login do caixa), e vê só essas empresas e os números delas. A meta mensal padrão vale para os meses sem meta específica.' : (isCaixa() ? 'Login de caixa: você vê todas as vendedoras da(s) sua(s) empresa(s). Ao cadastrar' : 'Vendedoras vinculadas ao seu login. Ao cadastrar')+' uma nova (em qualquer empresa), ela já fica vinculada ao seu acesso. As metas são definidas pelo administrador.'}</div><button class="btn sec" onclick="pdfVend()">📄 Gerar PDF</button><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
   <div class="tbl-wrap"><table><thead><tr><th>Vendedora</th><th>Empresa</th><th>Contato</th><th class="num">Meta padrão/mês</th><th class="num">Meta ${comp.slice(5)}/${comp.slice(0,4)}</th><th>Acesso</th><th>Situação</th><th></th></tr></thead><tbody>
   ${l.map(v => { const us = usus(v.id); return `<tr><td><b>${esc(v.nome)}</b></td><td>${empTag(v.empresa_id)}</td><td class="small">${esc(v.telefone)}${v.email?'<br>'+esc(v.email):''}</td><td class="num">${fmtN(v.meta_mensal_padrao)}</td><td class="num"><b>${fmtN(metaDe(v.id, comp))}</b></td>
     <td>${!isAdmin() ? us.map(u=>`<span class="tag ok">${esc(u.email)}</span>`).join(' ') : us.length?us.map(u=>`<span class="tag ${u.ativo?'ok':''}">${esc(u.email)}${u.ativo?'':' (inativo)'}</span>`).join(' ')+` <button class="btn sec sm" title="Empresa e logins" onclick="abrirVinculo(${v.id})">🔗</button>`:`<button class="btn sm" onclick="abrirVinculo(${v.id})">🔗 Vincular empresa e usuário</button>`}</td><td>${v.ativa?'<span class="tag ok">Ativa</span>':'<span class="tag">Inativa</span>'}</td>
@@ -1753,7 +1790,7 @@ async function salvarVend(id){
       if(id) Object.assign(M.vend[id], row);
       else { db.vendedoras.push(row); M.vend[row.id] = row; db.uv.push({ usuario_id:db.me.id, vendedora_id:row.id }); }
       montarEmpSel(); montarNav();
-      $('uPerfil').textContent = (minhas().length > 1 ? minhas().length+' vendedoras' : 'Vendedora') + ' · ' + minhasEmps().map(empNome).join(' / ');
+      $('uPerfil').textContent = perfilTxt();
     } else if(id) Object.assign(M.vend[id], await api.upd('vendedoras', id, o));
     else { const r = await api.ins('vendedoras', o); db.vendedoras.push(r); M.vend[r.id] = r; }
     fecharModal(true); toast('Vendedora salva.', 'ok'); pgVend();
@@ -1862,7 +1899,7 @@ function pgPerm(){
   const us = db.usuarios.slice().sort((a,b) => (a.perfil==='admin') - (b.perfil==='admin') || (a.email||'').localeCompare(b.email||''));
   st.perm = {}; us.forEach(u => { if(u.perfil !== 'admin') st.perm[u.id] = new Set(Array.isArray(u.telas) ? u.telas : TELAS_OPER); });
   const cab = TELAS_PERM.map(k => `<th style="text-align:center">${PAGES[k].ic}<br>${PAGES[k].t.replace(' (Follow-up)','')}</th>`).join('');
-  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Marque as telas que cada usuário pode abrir. <b>Vendedoras</b> pode ser liberada para o login do caixa cadastrar e editar as vendedoras dele (em qualquer empresa); Empresas, Usuários e Permissões são sempre só do administrador. O que cada login enxerga dentro das telas continua sendo definido pelas vendedoras vinculadas.</div>
+  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">Marque as telas que cada usuário pode abrir. <b>Vendedoras</b> transforma o login em <b>login de caixa</b>: ele cadastra/edita vendedoras e passa a enxergar <b>todas as vendedoras da(s) empresa(s) dele</b> (Painel de Metas, Planejar Ligações, Follow-up, Ligações e Clientes Conquistados) — ex.: caixadk vê só a DK, caixakf vê só a KF. Empresas, Usuários e Permissões são sempre só do administrador. O que cada login enxerga dentro das telas continua sendo definido pelas vendedoras vinculadas.</div>
     <button class="btn" id="permOk" onclick="salvarPerm()">Salvar permissões</button></div>
   <div class="tbl-wrap"><table><thead><tr><th>Usuário</th><th>Vendedoras</th>${cab}<th></th></tr></thead><tbody>
   ${us.map(u => { const adm = u.perfil === 'admin', vs = vincDe(u.id);
@@ -2160,7 +2197,7 @@ const META_TRAZIDOS = 5;
 const CANAIS = ['Ligação','Mensagem','Áudio'];
 const CANAL_IC = { 'Ligação':'📞', 'Mensagem':'💬', 'Áudio':'🎤' };
 const fmtMoeda = v => Number(v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
-function trazVisiveis(){ return db.conversoes.filter(x => empOk(x.empresa_id) && (isAdmin() || minhas().includes(x.vendedora_id))); }
+function trazVisiveis(){ const adm = isAdmin(), mv = new Set(minhas()); return db.conversoes.filter(x => empOk(x.empresa_id) && (adm || mv.has(x.vendedora_id))); }
 function pgTraz(){
   const p = st.traz, comp = p.comp, anoAt = new Date().getFullYear();
   if(db.convErr){ $('content').innerHTML = `<div class="card blocked"><div style="font-size:40px">🛠️</div><p>A tabela de clientes conquistados ainda não existe no Supabase. Execute o arquivo <b>09_clientes_trazidos.sql</b> no SQL Editor e clique em ↻.</p><p class="small muted">${esc(db.convErr)}</p></div>`; return; }
@@ -2173,7 +2210,7 @@ function pgTraz(){
   const totCli = rk.reduce((s,x) => s + x.n, 0), totVal = l.reduce((s,x) => s + Number(x.valor||0), 0), bateram = rk.filter(x => x.n >= META_TRAZIDOS).length;
   const anos = []; for(let y = anoAt-2; y <= anoAt+1; y++) anos.push(y);
   const medalha = k => ['🥇','🥈','🥉'][k] || (k+1);
-  $('content').innerHTML = `
+  $('content').innerHTML = avisoCaixa() + `
   <div class="filters">
     <div class="f"><label>Mês</label><select onchange="st.traz.comp=st.traz.comp.slice(0,4)+'-'+this.value;pgTraz()">${MESES.map((m,i)=>`<option value="${pad(i+1)}" ${comp.slice(5)===pad(i+1)?'selected':''}>${m}</option>`).join('')}</select></div>
     <div class="f"><label>Ano</label><select onchange="st.traz.comp=this.value+'-'+st.traz.comp.slice(5);pgTraz()">${anos.map(y=>`<option ${Number(comp.slice(0,4))===y?'selected':''}>${y}</option>`).join('')}</select></div>
