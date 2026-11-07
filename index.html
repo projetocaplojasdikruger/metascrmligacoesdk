@@ -153,6 +153,23 @@ tr.hl td{background:#FFF1E5!important;animation:hl 2.5s ease}
 .phone{white-space:nowrap}
 .chartbox{position:relative;height:280px}
 .chartbox.sm{height:250px}
+.mt-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;margin-bottom:12px}
+.mt-tools input{padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--tx)}
+.mt-tools .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+.mt-wrap{overflow:auto}
+.mt-tbl th,.mt-tbl td{padding:6px 3px;white-space:nowrap}
+.mt-tbl .stk{position:sticky;left:0;background:var(--card);z-index:2;min-width:150px;box-shadow:1px 0 0 var(--line)}
+.mt-tbl thead .stk{background:inherit}
+.mt-tbl input{width:54px;padding:5px 5px;border:1px solid var(--line);border-radius:6px;text-align:right;background:var(--card);color:var(--tx);font:inherit}
+.mt-tbl input::placeholder{color:var(--mut);opacity:.7}
+.mt-tbl input:focus{outline:2px solid #FDBA74;border-color:var(--or)}
+.mt-tbl input.mud{border-color:var(--or);background:var(--orl);font-weight:700}
+.mt-tbl .mtPad{width:62px;border-style:dashed}
+.mt-tbl th.foco,.mt-tbl td.foco{background:var(--orl)}
+.mt-tbl th.atual{color:var(--or2)}
+.mt-tbl tfoot td{border-top:2px solid var(--line);background:var(--bg)}
+.mt-bar .btn.sec{margin-left:auto}.mt-bar #mtOk{margin-left:0}
+
 .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .pn-top{display:grid;grid-template-columns:minmax(330px,1.1fr) 2fr;gap:14px;margin-bottom:14px}
 .pn-hero{display:flex;gap:20px;align-items:center}
@@ -589,6 +606,7 @@ const st = { page:'painel', emp:'', charts:[], call:null, hlLig:null, avisoAniv:
   cli:{ q:'', dia:'', mes:'', ano:'', pag:0, cls:'' },
   pl:{ vend:'', data:hoje(), hora:'', motivo:'Retorno', desc:'', q:'', cls:'', cart:'', anivMot:true, sel:new Set() },
   traz:{ comp:mesAtual(), vend:'' },
+  mt:{ ano:new Date().getFullYear(), mes:new Date().getMonth()+1, q:'', inativas:false },
   aniv:{ tab:'hoje', emp:'', cls:'', dia:'', mes:mesAtual().slice(5), ano:new Date().getFullYear() }
 };
 const isAdmin = () => db.me && db.me.perfil === 'admin';
@@ -766,6 +784,7 @@ const PAGES = {
   ligacoes:{ t:'Ligações Realizadas', ic:'✅', fn:()=>pgLig() },
   trazidos:{ t:'Clientes Conquistados', ic:'🏆', fn:()=>pgTraz() },
   clientes:{ t:'Clientes', ic:'👥', fn:()=>pgCli() },
+  metas:{ t:'Metas', ic:'🎯', fn:()=>pgMetas(), caixa:true },
   vendedoras:{ t:'Vendedoras', ic:'👩‍💼', fn:()=>pgVend(), extra:true },
   empresas:{ t:'Empresas', ic:'🏢', fn:()=>pgEmp(), adm:true },
   usuarios:{ t:'Usuários / Acessos', ic:'🔑', fn:()=>pgUsu(), adm:true },
@@ -779,6 +798,7 @@ function pode(k){
   if(!PAGES[k]) return false;
   if(isAdmin()) return true;
   if(PAGES[k].adm) return false;
+  if(PAGES[k].caixa) return isCaixa();
   const t = db.me && db.me.telas;
   if(PAGES[k].extra) return Array.isArray(t) && t.includes(k);
   return !Array.isArray(t) || t.includes(k);
@@ -788,7 +808,7 @@ function montarNav(){
   const nAtras = fuVisiveis().filter(f => f.status==='pendente' && f.data_prevista <= hoje()).length;
   const item = (k, bdg) => !pode(k) ? '' : `<a class="${st.page===k?'on':''}" onclick="ir('${k}')"><span class="ic">${PAGES[k].ic}</span>${PAGES[k].t}${bdg?`<span class="bdg">${bdg}</span>`:''}</a>`;
   let h = (TELAS_OPER.some(pode) ? '<div class="sec">Operação</div>' : '') + item('painel') + item('aniversariantes', nAniv||'') + item('planejamento', nAtras||'') + item('planejar') + item('ligacoes') + item('trazidos') + item('clientes');
-  const cad = item('vendedoras') + item('empresas') + item('usuarios') + item('permissoes');
+  const cad = item('metas') + item('vendedoras') + item('empresas') + item('usuarios') + item('permissoes');
   if(cad) h += '<div class="sec">Cadastros</div>' + cad;
   $('nav').innerHTML = h;
   $('bnav').innerHTML = [['painel','Painel'],['aniversariantes','Aniversários',nAniv],['planejamento','Follow-up',nAtras],['ligacoes','Ligações'],['clientes','Clientes']].filter(([k]) => pode(k))
@@ -1774,7 +1794,7 @@ function pgVend(){
   <div class="tbl-wrap"><table><thead><tr><th>Vendedora</th><th>Empresa</th><th>Contato</th><th class="num">Meta padrão/mês</th><th class="num">Meta ${comp.slice(5)}/${comp.slice(0,4)}</th><th>Acesso</th><th>Situação</th><th></th></tr></thead><tbody>
   ${l.map(v => { const us = usus(v.id); return `<tr><td><b>${esc(v.nome)}</b></td><td>${empTag(v.empresa_id)}</td><td class="small">${esc(v.telefone)}${v.email?'<br>'+esc(v.email):''}</td><td class="num">${fmtN(v.meta_mensal_padrao)}</td><td class="num"><b>${fmtN(metaDe(v.id, comp))}</b></td>
     <td>${!isAdmin() ? us.map(u=>`<span class="tag ok">${esc(u.email)}</span>`).join(' ') : us.length?us.map(u=>`<span class="tag ${u.ativo?'ok':''}">${esc(u.email)}${u.ativo?'':' (inativo)'}</span>`).join(' ')+` <button class="btn sec sm" title="Empresa e logins" onclick="abrirVinculo(${v.id})">🔗</button>`:`<button class="btn sm" onclick="abrirVinculo(${v.id})">🔗 Vincular empresa e usuário</button>`}</td><td>${v.ativa?'<span class="tag ok">Ativa</span>':'<span class="tag">Inativa</span>'}</td>
-    <td class="act">${isAdmin() ? `<button class="btn sec sm" onclick="abrirMetas(${v.id})">🎯 Metas</button> ` : ''}<button class="btn sec sm" onclick="abrirVend(${v.id})">✎</button>${isAdmin() ? ` <button class="btn danger sm" title="Excluir vendedora" onclick="excluirVend(${v.id})">🗑</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
+    <td class="act">${podeMetas() ? `<button class="btn sec sm" onclick="st.mt.q=M.vend[${v.id}].nome;ir('metas')">🎯 Metas</button> ` : ''}<button class="btn sec sm" onclick="abrirVend(${v.id})">✎</button>${isAdmin() ? ` <button class="btn danger sm" title="Excluir vendedora" onclick="excluirVend(${v.id})">🗑</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">Nenhuma vendedora cadastrada.</td></tr>'}
   </tbody></table></div>`;
 }
 async function patchUsuario(id, o){
@@ -1858,7 +1878,7 @@ function abrirVend(id){
   abrirModal(v ? 'Editar vendedora' : 'Nova vendedora', `<div class="form">
     <div class="full"><label>Nome *</label><input id="vdNome" value="${esc(v?v.nome:'')}"></div>
     <div><label>Empresa *</label><select id="vdEmp">${db.empresas.filter(e => e.ativo || e.id === emp).map(e=>`<option value="${e.id}" ${e.id===emp?'selected':''}>${esc(e.nome)}</option>`).join('')}</select></div>
-    <div ${isAdmin()?'':'class="hidden"'}><label>Meta padrão de ligações/mês</label><input type="number" min="0" id="vdMeta" value="${v?v.meta_mensal_padrao:0}"></div>
+    <div class="hidden"><label>Meta padrão de ligações/mês</label><input type="number" min="0" id="vdMeta" value="${v?v.meta_mensal_padrao:0}"></div>
     <div><label>Telefone</label><input id="vdTel" value="${esc(v?v.telefone:'')}"></div>
     <div><label>E-mail</label><input id="vdEmail" value="${esc(v?v.email:'')}"></div>
     <div><label>Situação</label><select id="vdAtiva"><option value="1">Ativa</option><option value="0" ${v&&!v.ativa?'selected':''}>Inativa</option></select></div></div>`,
@@ -1903,6 +1923,110 @@ async function salvarMetas(vid){
     for(const d of dels){ await api.del('metas', d.id); db.metas = db.metas.filter(x => x.id !== d.id); }
     fecharModal(true); toast('Metas salvas.', 'ok'); pgVend();
   }catch(e){ toast(e.message, 'err'); $('mtSalvar').disabled = false; }
+}
+
+/* ============================ METAS (admin + login de caixa) ============================ */
+/* Tela própria de metas de ligações: planilha anual vendedora × mês.
+   Célula vazia = usa a "meta padrão/mês" da vendedora. O caixa só vê e altera as vendedoras da(s) empresa(s) dele. */
+const podeMetas = () => isAdmin() || isCaixa();
+function mtVends(){ const p = st.mt; let l = vendsVisiveis(); if(!p.inativas) l = l.filter(v => v.ativa); if(p.q){ const q = p.q.toLowerCase(); l = l.filter(v => v.nome.toLowerCase().includes(q)); } return l; }
+function pgMetas(){
+  const p = st.mt, ano = p.ano, h = hoje(), compAt = mesAtual(), vs = mtVends();
+  const anoAt = new Date().getFullYear(), anos = [anoAt-1, anoAt, anoAt+1, anoAt+2];
+  const comps = MESES.map((_,i) => ano+'-'+pad(i+1)), cFoco = ano+'-'+pad(p.mes);
+  const rMeta = (vid, c) => db.metas.find(x => x.vendedora_id === vid && x.competencia === c);
+  const efet = (v, c) => { const r = rMeta(v.id, c); return r ? r.meta_ligacoes : (v.meta_mensal_padrao || 0); };
+  const totFoco = vs.reduce((s,v) => s + efet(v, cFoco), 0), semMeta = vs.filter(v => !efet(v, cFoco)).length, duF = diasUteis(cFoco);
+  const realFoco = ligVisiveis().filter(l => dataDeTs(l.inicio).slice(0,7) === cFoco && vs.some(v => v.id === l.vendedora_id)).length;
+  const esp = cFoco < compAt ? 1 : cFoco > compAt ? 0 : diasUteis(cFoco, h) / (duF || 1);
+  $('content').innerHTML = avisoCaixa() + `
+  <div class="filters">
+    <div class="f"><label>Ano</label><select onchange="mtTrocar(()=>st.mt.ano=Number(this.value))">${anos.map(a=>`<option ${a===ano?'selected':''}>${a}</option>`).join('')}</select></div>
+    <div class="f"><label>Mês em foco</label><select onchange="mtTrocar(()=>st.mt.mes=Number(this.value))">${MESES.map((m,i)=>`<option value="${i+1}" ${p.mes===i+1?'selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="f grow"><label>Buscar vendedora</label><input id="mtQ" value="${esc(p.q)}" placeholder="Nome" oninput="st.mt.q=this.value;clearTimeout(window._mq);window._mq=setTimeout(()=>mtTrocar(()=>{},()=>{const i=$('mtQ');i.focus();i.setSelectionRange(i.value.length,i.value.length)}),300)"></div>
+    <label class="small" style="display:flex;gap:6px;align-items:center;padding-bottom:9px;cursor:pointer"><input type="checkbox" ${p.inativas?'checked':''} onchange="mtTrocar(()=>st.mt.inativas=this.checked)"> Mostrar inativas</label>
+  </div>
+  <div class="pn-mk" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:14px">
+    <div class="mk"><div class="l">Meta da equipe · ${MESES[p.mes-1]}</div><div class="v">${fmtN(totFoco)}</div><div class="s">${vs.length} vendedora(s)${curEmp()?' · '+esc(empNome(curEmp())):''}</div></div>
+    <div class="mk"><div class="l">Meta diária da equipe</div><div class="v">${fmtDec(duF ? totFoco/duF : 0)}</div><div class="s">${duF} dias úteis (seg a sáb)</div></div>
+    <div class="mk ${totFoco && realFoco >= totFoco*esp ? 'ok' : totFoco && esp ? 'bad' : ''}"><div class="l">Realizado · ${MESES[p.mes-1]}</div><div class="v">${fmtN(realFoco)}<small> / ${fmtN(totFoco)}</small></div><div class="s">${pct(realFoco, totFoco)}% da meta${esp > 0 && esp < 1 ? ' · esperado hoje '+fmtN(Math.round(totFoco*esp)) : ''}</div></div>
+    <div class="mk ${semMeta ? 'warn' : 'ok'}"><div class="l">Sem meta no mês</div><div class="v">${semMeta}</div><div class="s">${semMeta ? 'defina a meta dessas vendedoras' : 'todas com meta definida'}</div></div>
+  </div>
+  <div class="card mt-tools">
+    <b>Ações rápidas · ${MESES[p.mes-1]}/${ano}</b>
+    <input type="number" min="0" id="mtVal" placeholder="Meta" style="width:100px">
+    <button class="btn sec sm" onclick="mtAplicar()">Aplicar a todas</button>
+    <span class="sep"></span>
+    <button class="btn sec sm" onclick="mtCopiarAnterior()">⇠ Copiar do mês anterior</button>
+    <button class="btn sec sm" onclick="mtRepetir()">Repetir para os meses seguintes ⇢</button>
+    <button class="btn sec sm" onclick="mtLimparMes()">Limpar mês (usar padrão)</button>
+  </div>
+  <div class="tbl-wrap mt-wrap"><table class="mt-tbl"><thead><tr><th class="stk">Vendedora</th><th class="num" title="Usada nos meses sem meta específica">Padrão/mês</th>
+    ${comps.map((c,i) => `<th class="num ${i+1===p.mes?'foco':''} ${c===compAt?'atual':''}" onclick="mtTrocar(()=>st.mt.mes=${i+1})" style="cursor:pointer">${MESES[i].slice(0,3)}</th>`).join('')}<th class="num">Total ano</th></tr></thead><tbody>
+  ${vs.map(v => `<tr data-v="${v.id}"><td class="stk"><b>${esc(v.nome)}</b>${curEmp()?'':' '+empTag(v.empresa_id)}${v.ativa?'':' <span class="tag">inativa</span>'}</td>
+    <td class="num"><input type="number" min="0" class="mtIn mtPad" data-v="${v.id}" data-orig="${v.meta_mensal_padrao||0}" value="${v.meta_mensal_padrao||0}" oninput="mtAlterou()"></td>
+    ${comps.map((c,i) => { const r = rMeta(v.id, c), o = r ? r.meta_ligacoes : '';
+      return `<td class="num ${i+1===p.mes?'foco':''}"><input type="number" min="0" class="mtIn mtCel" data-v="${v.id}" data-c="${c}" data-orig="${o}" value="${o}" placeholder="${v.meta_mensal_padrao||0}" oninput="mtAlterou()"></td>`; }).join('')}
+    <td class="num"><b class="mtTot" data-v="${v.id}"></b></td></tr>`).join('') || `<tr><td colspan="15" class="empty">Nenhuma vendedora${p.q?' encontrada':''}.</td></tr>`}
+  </tbody>${vs.length ? `<tfoot><tr><td class="stk"><b>Total da equipe</b></td><td></td>${comps.map((c,i)=>`<td class="num ${i+1===p.mes?'foco':''}"><b class="mtCol" data-c="${c}"></b></td>`).join('')}<td class="num"><b id="mtTotAno"></b></td></tr></tfoot>` : ''}</table></div>
+  <p class="small muted" style="margin:8px 2px 70px">Célula em branco = usa a <b>meta padrão/mês</b> (número em cinza). Clique no nome do mês para colocá-lo em foco. A meta diária é calculada automaticamente: meta do mês ÷ dias úteis (segunda a sábado).</p>
+  <div class="pl-bar mt-bar"><span id="mtCnt">Nenhuma alteração</span><span class="small muted">As alterações só valem depois de salvar.</span><button class="btn sec" id="mtDesc" onclick="mtDescartar()" disabled>Descartar</button><button class="btn" id="mtOk" onclick="salvarMetasGrade()" disabled>Salvar metas</button></div>`;
+  mtAlterou();
+}
+function mtMudancas(){ return [...document.querySelectorAll('.mtIn')].filter(i => String(i.value) !== String(i.dataset.orig)); }
+function mtAlterou(){
+  const n = mtMudancas().length;
+  document.querySelectorAll('.mtIn').forEach(i => i.classList.toggle('mud', String(i.value) !== String(i.dataset.orig)));
+  /* totais ao vivo (célula vazia = padrão digitado na linha) */
+  const pads = {}; document.querySelectorAll('.mtPad').forEach(i => pads[i.dataset.v] = Number(i.value)||0);
+  const col = {}, lin = {};
+  document.querySelectorAll('.mtCel').forEach(i => { const val = i.value === '' ? pads[i.dataset.v] : Number(i.value)||0; i.placeholder = pads[i.dataset.v];
+    col[i.dataset.c] = (col[i.dataset.c]||0) + val; lin[i.dataset.v] = (lin[i.dataset.v]||0) + val; });
+  document.querySelectorAll('.mtCol').forEach(b => b.textContent = fmtN(col[b.dataset.c]||0));
+  document.querySelectorAll('.mtTot').forEach(b => b.textContent = fmtN(lin[b.dataset.v]||0));
+  if($('mtTotAno')) $('mtTotAno').textContent = fmtN(Object.values(col).reduce((a,b)=>a+b,0));
+  if(!$('mtCnt')) return;
+  $('mtCnt').textContent = n ? `${n} alteração(ões) não salva(s)` : 'Nenhuma alteração';
+  $('mtCnt').style.color = n ? 'var(--or2)' : ''; $('mtOk').disabled = !n; $('mtDesc').disabled = !n;
+}
+/* troca de filtro sem perder alterações por engano */
+function mtTrocar(fn, depois){
+  if(mtMudancas().length && !confirm('Existem alterações não salvas nas metas. Descartar e continuar?')) return pgMetas();
+  fn(); pgMetas(); if(depois) depois();
+}
+function mtDescartar(){ document.querySelectorAll('.mtIn').forEach(i => i.value = i.dataset.orig); mtAlterou(); }
+const mtColuna = m => [...document.querySelectorAll(`.mtCel[data-c="${st.mt.ano}-${pad(m)}"]`)];
+function mtAplicar(){
+  const v = $('mtVal').value; if(v === '' || Number(v) < 0) return toast('Digite a meta a aplicar.', 'err');
+  mtColuna(st.mt.mes).forEach(i => i.value = Number(v)); mtAlterou(); toast(`Meta ${v} aplicada em ${MESES[st.mt.mes-1]} para todas. Confira e salve.`);
+}
+function mtCopiarAnterior(){
+  const m = st.mt.mes, ano = st.mt.ano, cAnt = m === 1 ? (ano-1)+'-12' : ano+'-'+pad(m-1);
+  mtColuna(m).forEach(i => { if(m > 1){ const a = document.querySelector(`.mtCel[data-v="${i.dataset.v}"][data-c="${cAnt}"]`); i.value = a ? a.value : ''; }
+    else { const r = db.metas.find(x => x.vendedora_id === Number(i.dataset.v) && x.competencia === cAnt); i.value = r ? r.meta_ligacoes : ''; } });
+  mtAlterou(); toast(`Metas de ${MESES[(m+10)%12]} copiadas para ${MESES[m-1]}. Confira e salve.`);
+}
+function mtRepetir(){
+  const m = st.mt.mes; if(m === 12) return toast('Dezembro é o último mês do ano.', 'err');
+  mtColuna(m).forEach(i => { for(let k = m+1; k <= 12; k++){ const d = document.querySelector(`.mtCel[data-v="${i.dataset.v}"][data-c="${st.mt.ano}-${pad(k)}"]`); if(d) d.value = i.value; } });
+  mtAlterou(); toast(`Metas de ${MESES[m-1]} repetidas até dezembro. Confira e salve.`);
+}
+function mtLimparMes(){ mtColuna(st.mt.mes).forEach(i => i.value = ''); mtAlterou(); }
+async function salvarMetasGrade(){
+  const mud = mtMudancas(); if(!mud.length) return;
+  if(mud.some(i => i.value !== '' && (Number(i.value) < 0 || !Number.isFinite(Number(i.value))))) return toast('Há metas com valor inválido.', 'err');
+  const pads = mud.filter(i => i.classList.contains('mtPad')), cels = mud.filter(i => i.classList.contains('mtCel'));
+  const ups = cels.filter(i => i.value !== '').map(i => ({ vendedora_id:Number(i.dataset.v), competencia:i.dataset.c, meta_ligacoes:Math.round(Number(i.value)) }));
+  const dels = cels.filter(i => i.value === '').map(i => db.metas.find(x => x.vendedora_id === Number(i.dataset.v) && x.competencia === i.dataset.c)).filter(Boolean);
+  $('mtOk').disabled = true; $('mtOk').textContent = 'Salvando…';
+  try{
+    for(const i of pads){ const vid = Number(i.dataset.v), r = await api.upd('vendedoras', vid, { meta_mensal_padrao: Math.round(Number(i.value)||0) });
+      if(!r) throw new Error('Sem permissão para alterar a meta padrão. Execute o 11_caixa_metas.sql no Supabase.'); Object.assign(M.vend[vid], r); }
+    if(ups.length){ const r = await sbFetch('/rest/v1/metas?on_conflict=vendedora_id,competencia', { method:'POST', body:ups, headers:{ Prefer:'resolution=merge-duplicates,return=representation' } });
+      (r||[]).forEach(n => { const k = db.metas.findIndex(x => x.vendedora_id===n.vendedora_id && x.competencia===n.competencia); if(k>=0) db.metas[k] = n; else db.metas.push(n); }); }
+    for(const d of dels){ await api.del('metas', d.id); db.metas = db.metas.filter(x => x.id !== d.id); }
+    toast(`Metas salvas (${mud.length} alteração(ões)).`, 'ok'); pgMetas();
+  }catch(e){ toast(/row-level security|permission|policy/i.test(e.message) ? 'Sem permissão para gravar metas. Peça ao administrador para executar o 11_caixa_metas.sql no Supabase.' : e.message, 'err'); $('mtOk').disabled = false; $('mtOk').textContent = 'Salvar metas'; }
 }
 
 /* ============================ EMPRESAS (ADMIN) ============================ */
