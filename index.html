@@ -1995,6 +1995,8 @@ function chipSel(grupo, v){
   $(grupo).value = v; document.querySelectorAll(`[data-g="${grupo}"]`).forEach(b => b.classList.toggle('on', b.dataset.v === String(v)));
   if(grupo === 'clEmp'){ const sv = $('clVend'); if(sv && !sv.disabled) sv.innerHTML = vendOptions('', 'Nenhuma', v); clVerificar(); }
 }
+/* Carteira no cadastro de cliente: admin e login de caixa (cada caixa só com as vendedoras das suas empresas) */
+const podeCarteira = () => isAdmin() || isCaixa();
 const chipsHTML = (grupo, opts, val, desab) => `<input type="hidden" id="${grupo}" value="${esc(val)}"><div class="chips">${opts.map(([v, t, cor]) =>
   `<button type="button" data-g="${grupo}" data-v="${esc(v)}" class="${String(val)===String(v)?'on':''}" ${cor?`style="--cc:${cor}"`:''} ${desab?'disabled':''} onclick="chipSel('${grupo}','${esc(v)}')">${cor?'<i></i>':''}${t}</button>`).join('')}</div>`;
 function clVerificar(){
@@ -2033,7 +2035,7 @@ function abrirCliente(id, preset){
     <div class="cl-sec">🏬 Loja e carteira</div>
     <div class="form">
       <div><label>Empresa</label>${chipsHTML('clEmp', es.map(e => [e.id, esc(e.nome), e.cor||'#F2701A']), emp, !podeEmp)}</div>
-      <div><label for="clVend">Carteira (vendedora)</label><select id="clVend" ${isAdmin()?'':'disabled'}>${vendOptions(vendSel,'Nenhuma',emp)}</select></div>
+      <div><label for="clVend">Carteira (vendedora)</label><select id="clVend" ${podeCarteira()?'':'disabled'}>${vendOptions(vendSel,'Nenhuma',emp)}</select></div>
     </div>
     <div class="cl-sec">⭐ Perfil</div>
     <div class="form">
@@ -2061,7 +2063,10 @@ async function salvarCliente(id, outro){
   const dupNome = db.clientes.find(c => c.id !== id && c.empresa_id === o.empresa_id && normNome(c.nome) === normNome(o.nome));
   if(dupNome && !confirm(`Já existe "${dupNome.nome}" em ${empNome(o.empresa_id)}${dupNome.celular ? ' ('+dupNome.celular+')' : ''}.\n\nCadastrar mesmo assim?`)) return;
   const preset = { emp:o.empresa_id, vend:o.vendedora_id };
-  if(!isAdmin()){ const empSel = o.empresa_id; delete o.empresa_id; delete o.vendedora_id; if(!id) o.empresa_id = (minhasEmps().length > 1 ? empSel : curEmp()) || empSel; if(id) delete o.data_cadastro; else o.data_cadastro = hoje(); }
+  if(!isAdmin()){ const empSel = o.empresa_id; delete o.empresa_id; if(!id) o.empresa_id = (minhasEmps().length > 1 ? empSel : curEmp()) || empSel; if(id) delete o.data_cadastro; else o.data_cadastro = hoje();
+    if(!podeCarteira()) delete o.vendedora_id;
+    else if(o.vendedora_id){ const v = M.vend[o.vendedora_id], empCli = id ? M.cli[id].empresa_id : o.empresa_id;
+      if(!v || !minhas().includes(v.id) || v.empresa_id !== empCli) return toast('A vendedora da carteira precisa ser da mesma empresa do cliente.', 'err'); } }
   ['clSalvar','clSalvarNovo'].forEach(b => { if($(b)) $(b).disabled = true; });
   try{
     if(id){ Object.assign(M.cli[id], await api.upd('clientes', id, o)); }
@@ -2069,7 +2074,7 @@ async function salvarCliente(id, outro){
     toast(`Cliente ${o.nome} salvo.`, 'ok');
     if(st.page === 'clientes') pgCli();
     if(outro) abrirCliente(null, preset); else fecharModal(true);
-  }catch(e){ toast(e.message, 'err'); ['clSalvar','clSalvarNovo'].forEach(b => { if($(b)) $(b).disabled = false; }); }
+  }catch(e){ toast(!isAdmin() && 'vendedora_id' in o && /security|permission|policy/i.test(e.message) ? 'Sem permissão para definir a carteira. Peça ao administrador para liberar a coluna vendedora_id de clientes para o login de caixa no Supabase.' : e.message, 'err'); ['clSalvar','clSalvarNovo'].forEach(b => { if($(b)) $(b).disabled = false; }); }
 }
 function historicoCli(id){
   const c = M.cli[id], ls = db.ligacoes.filter(l => l.cliente_id === id), fs = db.followups.filter(f => f.cliente_id === id && f.status === 'pendente').sort((a,b)=>a.data_prevista.localeCompare(b.data_prevista));
@@ -2087,7 +2092,7 @@ function historicoCli(id){
 function pgVend(){
   const comp = mesAtual(), l = vendsVisiveis();
   const usus = vid => db.usuarios.filter(u => u.perfil !== 'admin' && vincDe(u.id).includes(vid));
-  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">${isAdmin() ? 'Cada vendedora fica vinculada a uma empresa e a um ou mais logins (🔗). Um login pode ter várias vendedoras, de qualquer empresa (ex.: login do caixa), e vê só essas empresas e os números delas. A meta mensal padrão vale para os meses sem meta específica.' : (isCaixa() ? 'Login de caixa: você vê todas as vendedoras da(s) sua(s) empresa(s). Ao cadastrar' : 'Vendedoras vinculadas ao seu login. Ao cadastrar')+' uma nova (em qualquer empresa), ela já fica vinculada ao seu acesso. As metas são definidas pelo administrador.'}</div><button class="btn sec" onclick="pdfVend()">📄 Gerar PDF</button><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
+  $('content').innerHTML = `<div class="filters"><div class="f grow small muted">${isAdmin() ? 'Cada vendedora fica vinculada a uma empresa e a um ou mais logins (🔗). Um login pode ter várias vendedoras, de qualquer empresa (ex.: login do caixa), e vê só essas empresas e os números delas. A meta mensal padrão vale para os meses sem meta específica.' : (isCaixa() ? 'Login de caixa: você vê todas as vendedoras da(s) sua(s) empresa(s). Ao cadastrar' : 'Vendedoras vinculadas ao seu login. Ao cadastrar')+' uma nova (somente na(s) sua(s) empresa(s)), ela já fica vinculada ao seu acesso e aparece na Carteira do cadastro de clientes. As metas são definidas pelo administrador.'}</div><button class="btn sec" onclick="pdfVend()">📄 Gerar PDF</button><button class="btn" onclick="abrirVend()">+ Nova vendedora</button></div>
   <div class="tbl-wrap"><table><thead><tr><th>Vendedora</th><th>Empresa</th><th>Contato</th><th class="num">Meta padrão/mês</th><th class="num">Meta ${comp.slice(5)}/${comp.slice(0,4)}</th><th>Acesso</th><th>Situação</th><th></th></tr></thead><tbody>
   ${l.map(v => { const us = usus(v.id); return `<tr><td><b>${esc(v.nome)}</b></td><td>${empTag(v.empresa_id)}</td><td class="small">${esc(v.telefone)}${v.email?'<br>'+esc(v.email):''}</td><td class="num">${fmtN(v.meta_mensal_padrao)}</td><td class="num"><b>${fmtN(metaDe(v.id, comp))}</b></td>
     <td>${!isAdmin() ? us.map(u=>`<span class="tag ok">${esc(u.email)}</span>`).join(' ') : us.length?us.map(u=>`<span class="tag ${u.ativo?'ok':''}">${esc(u.email)}${u.ativo?'':' (inativo)'}</span>`).join(' ')+` <button class="btn sec sm" title="Empresa e logins" onclick="abrirVinculo(${v.id})">🔗</button>`:`<button class="btn sm" onclick="abrirVinculo(${v.id})">🔗 Vincular empresa e usuário</button>`}</td><td>${v.ativa?'<span class="tag ok">Ativa</span>':'<span class="tag">Inativa</span>'}</td>
@@ -2171,10 +2176,10 @@ async function inativarVend(id){
   catch(e){ toast(e.message, 'err'); }
 }
 function abrirVend(id){
-  const v = id ? M.vend[id] : null, emp = v ? v.empresa_id : (curEmp() || (db.empresas[0]||{}).id);
+  const v = id ? M.vend[id] : null, emp = v ? v.empresa_id : (curEmp() || (empsParaVend()[0]||db.empresas[0]||{}).id);
   abrirModal(v ? 'Editar vendedora' : 'Nova vendedora', `<div class="form">
     <div class="full"><label>Nome *</label><input id="vdNome" value="${esc(v?v.nome:'')}"></div>
-    <div><label>Empresa *</label><select id="vdEmp">${db.empresas.filter(e => e.ativo || e.id === emp).map(e=>`<option value="${e.id}" ${e.id===emp?'selected':''}>${esc(e.nome)}</option>`).join('')}</select></div>
+    <div><label>Empresa *</label><select id="vdEmp">${empsParaVend(emp).map(e=>`<option value="${e.id}" ${e.id===emp?'selected':''}>${esc(e.nome)}</option>`).join('')}</select></div>
     <div class="hidden"><label>Meta padrão de ligações/mês</label><input type="number" min="0" id="vdMeta" value="${v?v.meta_mensal_padrao:0}"></div>
     <div><label>Telefone</label><input id="vdTel" value="${esc(v?v.telefone:'')}"></div>
     <div><label>E-mail</label><input id="vdEmail" value="${esc(v?v.email:'')}"></div>
@@ -2186,19 +2191,28 @@ async function salvarVend(id){
   if(!o.nome) return toast('Informe o nome.', 'err');
   $('vdSalvar').disabled = true;
   try{
-    if(!isAdmin()){
-      /* caixa: grava pela função do Supabase (08_caixa_vendedoras.sql), que já vincula a nova vendedora ao login */
-      const r = await sbFetch('/rest/v1/rpc/' + (id ? 'editar_vendedora' : 'criar_vendedora'), { method:'POST',
-        body: { ...(id ? { p_id:id } : {}), p_nome:o.nome, p_empresa_id:o.empresa_id, p_telefone:o.telefone, p_email:o.email, p_ativa:o.ativa } });
-      const row = Array.isArray(r) ? r[0] : r;
-      if(id) Object.assign(M.vend[id], row);
-      else { db.vendedoras.push(row); M.vend[row.id] = row; db.uv.push({ usuario_id:db.me.id, vendedora_id:row.id }); }
-      montarEmpSel(); montarNav();
-      $('uPerfil').textContent = perfilTxt();
-    } else if(id) Object.assign(M.vend[id], await api.upd('vendedoras', id, o));
-    else { const r = await api.ins('vendedoras', o); db.vendedoras.push(r); M.vend[r.id] = r; }
+    await gravarVendedora(id, o);
     fecharModal(true); toast('Vendedora salva.', 'ok'); pgVend();
   }catch(e){ toast(e.message, 'err'); $('vdSalvar').disabled = false; }
+}
+/* Empresas em que o login pode cadastrar vendedoras: admin = todas; caixa/vendedora = só as do seu login */
+const empsParaVend = incl => db.empresas.filter(e => (e.ativo && (isAdmin() || !minhasEmps().length || minhasEmps().includes(e.id))) || e.id === incl);
+/* Grava vendedora (usada na tela Vendedoras e no cadastro rápido dentro do formulário de cliente) */
+async function gravarVendedora(id, o){
+  if(!isAdmin()){
+    if(minhasEmps().length && !minhasEmps().includes(o.empresa_id)) throw new Error('Você só pode cadastrar vendedoras da(s) sua(s) empresa(s): '+minhasEmps().map(empNome).join(' / ')+'.');
+    /* caixa: grava pela função do Supabase (08_caixa_vendedoras.sql), que já vincula a nova vendedora ao login */
+    const r = await sbFetch('/rest/v1/rpc/' + (id ? 'editar_vendedora' : 'criar_vendedora'), { method:'POST',
+      body: { ...(id ? { p_id:id } : {}), p_nome:o.nome, p_empresa_id:o.empresa_id, p_telefone:o.telefone, p_email:o.email, p_ativa:o.ativa } });
+    const row = Array.isArray(r) ? r[0] : r;
+    if(id) Object.assign(M.vend[id], row);
+    else { db.vendedoras.push(row); M.vend[row.id] = row; db.uv.push({ usuario_id:db.me.id, vendedora_id:row.id }); }
+    montarEmpSel(); montarNav();
+    $('uPerfil').textContent = perfilTxt();
+    return id ? M.vend[id] : row;
+  }
+  if(id){ Object.assign(M.vend[id], await api.upd('vendedoras', id, o)); return M.vend[id]; }
+  const r = await api.ins('vendedoras', o); db.vendedoras.push(r); M.vend[r.id] = r; return r;
 }
 function abrirMetas(vid, ano){
   const v = M.vend[vid]; ano = ano || new Date().getFullYear();
