@@ -2932,8 +2932,9 @@ function abrirTraz(id){
     <div><label>Como trouxe *</label><select id="tzCanal">${CANAIS.map(k=>`<option ${(x?x.canal:'Ligação')===k?'selected':''}>${k}</option>`).join('')}</select></div>
     <div class="full"><label>Cliente *</label>${clientePickerHTML(x ? x.cliente_id : '')}</div>
     <div><label>Dia da compra *</label><input type="date" id="tzData" value="${x ? x.data_compra : hoje()}"></div>
-    <div><label>Nº da nota fiscal *</label><input id="tzNF" value="${esc(x ? x.nota_fiscal : '')}" inputmode="numeric"></div>
-    <div><label>Valor (R$) *</label><input type="number" id="tzValor" min="0" step="0.01" inputmode="decimal" value="${x ? x.valor : ''}" placeholder="0,00"></div></div>`,
+    <div><label>Nº da nota fiscal *</label><input id="tzNF" value="${esc(x ? x.nota_fiscal : '')}" inputmode="numeric" oninput="$('tzNFmsg').innerHTML=''"></div>
+    <div><label>Valor (R$) *</label><input type="number" id="tzValor" min="0" step="0.01" inputmode="decimal" value="${x ? x.valor : ''}" placeholder="0,00"></div>
+    <div class="full" id="tzNFmsg"></div></div>`,
     `<button class="btn sec" onclick="fecharModal()">Cancelar</button><button class="btn" id="tzSalvar" onclick="salvarTraz(${x?x.id:'null'})">Salvar</button>`);
 }
 async function salvarTraz(id){
@@ -2945,16 +2946,33 @@ async function salvarTraz(id){
   if(!(valor > 0)) return toast('Informe o valor da compra.', 'err');
   const emp = M.vend[vend].empresa_id;
   if(M.cli[cid].empresa_id !== emp) return toast(`Este cliente é da ${empNome(M.cli[cid].empresa_id)} e a vendedora é da ${empNome(emp)}.`, 'err');
-  const dup = db.conversoes.find(r => r.empresa_id === emp && r.nota_fiscal === nf && r.id !== id);
-  if(dup) return toast(`A nota fiscal ${nf} já foi registrada (${cliNome(dup.cliente_id)}, ${vendNome(dup.vendedora_id)}).`, 'err');
   const o = { empresa_id:emp, vendedora_id:vend, cliente_id:cid, canal:$('tzCanal').value, data_compra:data, nota_fiscal:nf, valor };
-  $('tzSalvar').disabled = true;
+  $('tzSalvar').disabled = true; $('tzNFmsg').innerHTML = '';
+  /* A verificação de nota repetida era feita só na cópia carregada no login. Se o registro tinha sido
+     excluído/corrigido em outro aparelho (ou por outra pessoa), o sistema bloqueava uma nota que já não
+     existia. Agora recarrega do Supabase antes de conferir. */
+  try{ db.conversoes = await sbAll('clientes_trazidos','select=*&order=id'); }catch(e){}
+  const dup = db.conversoes.find(r => r.empresa_id === emp && String(r.nota_fiscal ?? '').trim() === nf && r.id !== id);
+  if(dup){
+    $('tzSalvar').disabled = false;
+    const podeAbrir = trazVisiveis().some(r => r.id === dup.id);
+    $('tzNFmsg').innerHTML = `<div class="box-info" style="margin:0;border-color:var(--bad)">⚠️ A nota fiscal <b>${esc(nf)}</b> já está registrada na ${esc(empNome(emp))}:<br>
+      <b>${esc(cliNome(dup.cliente_id))}</b> · vendedora ${esc(vendNome(dup.vendedora_id))} · compra de <b>${fmtD(dup.data_compra)}</b> · ${fmtMoeda(dup.valor)}
+      ${dup.data_compra.slice(0,7) !== st.traz.comp ? `<br><span class="small">Esse registro está em <b>${MESES[Number(dup.data_compra.slice(5,7))-1]}/${dup.data_compra.slice(0,4)}</b>, por isso não aparece na lista do mês que está na tela.</span>` : ''}
+      ${podeAbrir ? `<div style="margin-top:8px"><button class="btn sec sm" onclick="abrirTrazExistente(${dup.id})">Abrir esse registro</button></div>` : ''}</div>`;
+    return toast(`A nota fiscal ${nf} já está registrada (${cliNome(dup.cliente_id)}, ${fmtD(dup.data_compra)}).`, 'err');
+  }
   try{
     if(id) Object.assign(db.conversoes.find(r => r.id === id), await api.upd('clientes_trazidos', id, o));
     else db.conversoes.push(await api.ins('clientes_trazidos', o));
     fecharModal(true); toast('Cliente conquistado registrado.', 'ok');
     st.traz.comp = data.slice(0,7); if(st.page === 'trazidos') pgTraz();
-  }catch(e){ toast(/duplicate|unique/i.test(e.message) ? 'Essa nota fiscal já foi registrada nesta loja.' : e.message, 'err'); $('tzSalvar').disabled = false; }
+  }catch(e){ toast(/duplicate|unique/i.test(e.message) ? `A nota fiscal ${nf} já foi registrada nesta loja por uma vendedora que o seu login não enxerga. Peça ao administrador para conferir.` : e.message, 'err'); $('tzSalvar').disabled = false; }
+}
+function abrirTrazExistente(id){
+  const x = db.conversoes.find(r => r.id === id); if(!x) return;
+  fecharModal(true); st.traz.comp = x.data_compra.slice(0,7); st.traz.vend = '';
+  ir('trazidos'); abrirTraz(id);
 }
 async function excluirTraz(id){
   const x = db.conversoes.find(r => r.id === id); if(!x) return;
